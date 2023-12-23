@@ -1,0 +1,12 @@
+[package]
+name = "substrait-expr-macros"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+proc-macro2 = "1.0.67"
+quote = "1.0.33"
+syn = { version = "2.0.37", features = ["full"] }
+
+[lib]
+proc-macro = true
