@@ -1,5 +1,7 @@
 [package]
 name = "substrait-expr-funcgen"
+description = "Utilities for automatically generating code from Substrait YAML files"
+license = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
 
