@@ -10,7 +10,7 @@ authors = ["Weston Pace <weston.pace@gmail.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/westonpace/substrait-expr"
 readme = "README.md"
-description = "Builders and transformers for Substrait plans and expressions"
+description = "Utilities for working with Substrait expressions"
 
 [workspace.dependencies]
 substrait-expr-funcgen = { path = "./substrait-expr-funcgen" }
