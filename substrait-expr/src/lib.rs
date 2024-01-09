@@ -140,6 +140,7 @@ pub mod error;
 /// The easiest way to use these functions is through the trait objects.
 ///
 /// ```
+/// # use substrait_expr::helpers::literals::literal;
 /// # use substrait_expr::helpers::schema::EmptySchema;
 /// # use substrait_expr::helpers::schema::SchemaInfo;
 /// # use substrait_expr::builder::{BuilderParams, ExpressionsBuilder};
