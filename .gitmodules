@@ -1,3 +1,3 @@
-[submodule "substrait"]
-	path = substrait
+[submodule "substrait-expr/substrait"]
+	path = substrait-expr/substrait
 	url = https://github.com/substrait-io/substrait.git

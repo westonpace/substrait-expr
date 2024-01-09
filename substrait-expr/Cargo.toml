@@ -8,7 +8,14 @@ repository.workspace = true
 readme.workspace = true
 description.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+include = [
+    "build.rs",
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "substrait/LICENSE",
+    "substrait/README.md",
+    "substrait/extensions/**/*.yaml",
+]
 
 [dependencies]
 substrait = "0.20.2"
