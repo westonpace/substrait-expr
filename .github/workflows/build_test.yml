@@ -39,7 +39,6 @@ jobs:
           clippy_flags: -- -Dwarnings
           reporter: "github-pr-review"
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
   test:
     name: Test
     runs-on: ${{ matrix.os }}
