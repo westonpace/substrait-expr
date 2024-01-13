@@ -9,7 +9,10 @@ use crate::{
     util::HasRequiredPropertiesRef,
 };
 
-use super::types::{self, nullability, TypeExt, TypeRegistry, UNKNOWN};
+use super::{
+    registry::ExtensionsRegistry,
+    types::{self, nullability, TypeExt},
+};
 
 /// A schema that does not know types or names
 ///
@@ -17,7 +20,7 @@ use super::types::{self, nullability, TypeExt, TypeRegistry, UNKNOWN};
 /// how many fields there are.
 #[derive(Debug, Default, PartialEq)]
 pub struct EmptySchema {
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
 }
 
 /// A field in a names-only schema
@@ -38,7 +41,7 @@ pub struct NamesOnlySchemaNode {
 /// a single (possibly nested) column
 #[derive(PartialEq, Debug)]
 pub struct NamesOnlySchema {
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
     /// The root node of the schema
     pub root: NamesOnlySchemaNode,
 }
@@ -51,21 +54,21 @@ impl NamesOnlySchema {
                 name: String::new(),
                 children: root_nodes,
             },
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
-    /// Create a names-only schema with the given types registry
-    pub fn new_with_types(
+    /// Create a names-only schema with the given registry
+    pub fn new_with_registry(
         root_nodes: Vec<NamesOnlySchemaNode>,
-        type_registry: TypeRegistry,
+        registry: ExtensionsRegistry,
     ) -> Self {
         Self {
             root: NamesOnlySchemaNode {
                 name: String::new(),
                 children: root_nodes,
             },
-            type_registry,
+            registry,
         }
     }
 }
@@ -75,15 +78,15 @@ impl NamesOnlySchemaNode {
     ///
     /// Since we don't know types this will typically be unknown.  However,
     /// for nested fields, we know they must be of the Struct type.
-    fn as_type(&self) -> Type {
+    fn as_type(&self, unknown_type: &Type) -> Type {
         if self.children.is_empty() {
-            types::unknown()
+            unknown_type.clone()
         } else {
             types::struct_(
                 true,
                 self.children
                     .iter()
-                    .map(|child| child.as_type())
+                    .map(|child| child.as_type(unknown_type))
                     .collect::<Vec<_>>(),
             )
         }
@@ -111,7 +114,7 @@ impl<'a> Iterator for NamesOnlySchemaNodeNamesDfsIter<'a> {
 /// A schema that knows the types (but not names) of its fields
 #[derive(Debug, PartialEq)]
 pub struct TypesOnlySchema {
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
     /// The root node of the schema
     pub root: Struct,
 }
@@ -121,16 +124,13 @@ impl TypesOnlySchema {
     pub fn new(root: Struct) -> Self {
         Self {
             root,
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
-    /// Create a types-only schema with a given type registry
-    pub fn new_with_types(root: Struct, type_registry: TypeRegistry) -> Self {
-        Self {
-            root,
-            type_registry,
-        }
+    /// Create a types-only schema with a given registry
+    pub fn new_with_registry(root: Struct, registry: ExtensionsRegistry) -> Self {
+        Self { root, registry }
     }
 }
 
@@ -150,7 +150,7 @@ pub struct FullSchemaNode {
 /// A schema that knows both the types and names of its fields
 #[derive(Debug, PartialEq)]
 pub struct FullSchema {
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
     /// The root node of the schema
     pub root: FullSchemaNode,
 }
@@ -160,16 +160,13 @@ impl FullSchema {
     pub fn new(root: FullSchemaNode) -> Self {
         Self {
             root,
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
-    /// Create a full schema with the given type registry
-    pub fn new_with_types(root: FullSchemaNode, type_registry: TypeRegistry) -> Self {
-        Self {
-            root,
-            type_registry,
-        }
+    /// Create a full schema with the given registry
+    pub fn new_with_registry(root: FullSchemaNode, registry: ExtensionsRegistry) -> Self {
+        Self { root, registry }
     }
 }
 
@@ -233,16 +230,16 @@ impl<'a> Iterator for FullSchemaFieldsDfsIter<'a> {
 }
 
 impl SchemaInfo {
-    /// Return a reference to the schemas type registry
+    /// Return a reference to the schema's extensions registry
     ///
-    /// This type registry keeps track of the user defined types
+    /// This registry keeps track of the user defined types
     /// that are referenced by the schema
-    pub fn type_registry(&self) -> &TypeRegistry {
+    pub fn extensions_registry(&self) -> &ExtensionsRegistry {
         match self {
-            SchemaInfo::Empty(schm) => &schm.type_registry,
-            SchemaInfo::Names(schm) => &schm.type_registry,
-            SchemaInfo::Types(schm) => &schm.type_registry,
-            SchemaInfo::Full(schm) => &schm.type_registry,
+            SchemaInfo::Empty(schm) => &schm.registry,
+            SchemaInfo::Names(schm) => &schm.registry,
+            SchemaInfo::Types(schm) => &schm.registry,
+            SchemaInfo::Full(schm) => &schm.registry,
         }
     }
 
@@ -311,7 +308,14 @@ impl SchemaInfo {
             SchemaInfo::Empty(_) => Box::new(std::iter::empty()),
             // TODO: SchemaInfo::Names is flat, SchemaInfo::Types is not.  Resolve this difference
             SchemaInfo::Names(names) => {
-                Box::new(names.root.children.iter().map(|child| child.as_type()))
+                let unknown_type = crate::builder::types::unknown(&names.registry);
+                Box::new(
+                    names
+                        .root
+                        .children
+                        .iter()
+                        .map(move |child| child.as_type(&unknown_type)),
+                )
             }
             SchemaInfo::Types(type_info) => Box::new(
                 TypesOnlySchemaTypesDfsIter {
@@ -363,9 +367,9 @@ impl SchemaInfo {
     /// If types are not known then the returned type will be the unknown type
     pub fn resolve_type(&self, ref_seg: &ReferenceSegment) -> Result<Type> {
         match self {
-            SchemaInfo::Empty(_) => Ok(UNKNOWN.clone()),
+            SchemaInfo::Empty(empty) => Ok(crate::builder::types::unknown(&empty.registry)),
             // TODO: Make sure a field exists before returning unknown
-            SchemaInfo::Names(_) => Ok(UNKNOWN.clone()),
+            SchemaInfo::Names(names) => Ok(crate::builder::types::unknown(&names.registry)),
             SchemaInfo::Types(type_info) => {
                 let mut cur = &type_info.root.types;
                 let mut _owned_cur = Vec::new();

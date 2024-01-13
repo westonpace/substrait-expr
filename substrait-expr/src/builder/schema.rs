@@ -12,12 +12,11 @@ use substrait::proto::{Expression, Type};
 use crate::error::{Result, SubstraitExprError};
 use crate::helpers::expr::ExpressionExt;
 use crate::helpers::literals::literal;
+use crate::helpers::registry::ExtensionsRegistry;
 use crate::helpers::schema::{
     FullSchema, FullSchemaNode, NamesOnlySchema, NamesOnlySchemaNode, SchemaInfo, TypesOnlySchema,
 };
-use crate::helpers::types::{
-    nullability, TypeRegistry, NO_VARIATION, UNKNOWN_TYPE_NAME, UNKNOWN_TYPE_URI,
-};
+use crate::helpers::types::{nullability, NO_VARIATION, UNKNOWN_TYPE_NAME, UNKNOWN_TYPE_URI};
 
 use super::functions::FunctionsBuilder;
 use super::BuilderParams;
@@ -48,7 +47,7 @@ impl UserDefinedTypeBuilder {
 
 /// A builder object for creating user defined types
 pub struct TypeBuilder<'a> {
-    type_registry: &'a TypeRegistry,
+    registry: &'a ExtensionsRegistry,
 }
 
 impl<'a> TypeBuilder<'a> {
@@ -62,8 +61,8 @@ impl<'a> TypeBuilder<'a> {
     /// This type is normally used when the schema is unknown or not type aware.
     pub fn unknown(&self) -> Type {
         let type_reference = self
-            .type_registry
-            .register(UNKNOWN_TYPE_URI.to_string(), UNKNOWN_TYPE_NAME);
+            .registry
+            .register_type(UNKNOWN_TYPE_URI.to_string(), UNKNOWN_TYPE_NAME);
         Type {
             kind: Some(Kind::UserDefined(UserDefined {
                 nullability: nullability(true),
@@ -80,7 +79,7 @@ impl<'a> TypeBuilder<'a> {
         uri: impl Into<String>,
         name: impl AsRef<str>,
     ) -> UserDefinedTypeBuilder {
-        let type_reference = self.type_registry.register(uri.into(), name.as_ref());
+        let type_reference = self.registry.register_type(uri.into(), name.as_ref());
         UserDefinedTypeBuilder { type_reference }
     }
 }
@@ -88,7 +87,7 @@ impl<'a> TypeBuilder<'a> {
 /// A builder for creating a types-only schema
 pub struct TypesOnlySchemaBuilder {
     children: Vec<Type>,
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
 }
 
 impl TypesOnlySchemaBuilder {
@@ -96,7 +95,7 @@ impl TypesOnlySchemaBuilder {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
@@ -104,10 +103,10 @@ impl TypesOnlySchemaBuilder {
     ///
     /// This is an advanced case and only needed if you are trying to maintain type
     /// anchors.
-    pub fn new_with_types(type_registry: TypeRegistry) -> Self {
+    pub fn new_with_types(registry: ExtensionsRegistry) -> Self {
         Self {
             children: Vec::new(),
-            type_registry,
+            registry,
         }
     }
 
@@ -136,27 +135,27 @@ impl TypesOnlySchemaBuilder {
         }
     }
 
-    fn inner_build(self) -> (Struct, TypeRegistry) {
+    fn inner_build(self) -> (Struct, ExtensionsRegistry) {
         (
             Struct {
                 types: self.children,
                 nullability: nullability(false),
                 ..Default::default()
             },
-            self.type_registry,
+            self.registry,
         )
     }
 
     /// Consume the builder to create a schema
     pub fn build(self) -> SchemaInfo {
-        let (strct, type_registry) = self.inner_build();
-        SchemaInfo::Types(TypesOnlySchema::new_with_types(strct, type_registry))
+        let (strct, registry) = self.inner_build();
+        SchemaInfo::Types(TypesOnlySchema::new_with_registry(strct, registry))
     }
 
     /// Create a type builder to create user defined types
     pub fn types(&self) -> TypeBuilder {
         TypeBuilder {
-            type_registry: &self.type_registry,
+            registry: &self.registry,
         }
     }
 }
@@ -164,7 +163,7 @@ impl TypesOnlySchemaBuilder {
 /// A builder object for a names-only schema
 pub struct NamesOnlySchemaNodeBuilder {
     children: Vec<NamesOnlySchemaNode>,
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
 }
 
 impl NamesOnlySchemaNodeBuilder {
@@ -172,7 +171,7 @@ impl NamesOnlySchemaNodeBuilder {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
@@ -180,10 +179,10 @@ impl NamesOnlySchemaNodeBuilder {
     ///
     /// This is an advanced case and only needed if you are trying to maintain type
     /// anchors.
-    pub fn new_with_types(type_registry: TypeRegistry) -> Self {
+    pub fn new_with_types(registry: ExtensionsRegistry) -> Self {
         Self {
             children: Vec::new(),
-            type_registry,
+            registry,
         }
     }
 
@@ -216,9 +215,9 @@ impl NamesOnlySchemaNodeBuilder {
 
     /// Consume the builder to create a schema
     pub fn build(self) -> SchemaInfo {
-        SchemaInfo::Names(NamesOnlySchema::new_with_types(
+        SchemaInfo::Names(NamesOnlySchema::new_with_registry(
             self.children,
-            self.type_registry,
+            self.registry,
         ))
     }
 }
@@ -228,7 +227,7 @@ pub struct FullSchemaBuilder {
     nullable: bool,
     name: String,
     children: Vec<FullSchemaNode>,
-    type_registry: TypeRegistry,
+    registry: ExtensionsRegistry,
 }
 
 impl FullSchemaBuilder {
@@ -238,7 +237,7 @@ impl FullSchemaBuilder {
             nullable,
             name,
             children: Vec::new(),
-            type_registry: TypeRegistry::default(),
+            registry: ExtensionsRegistry::default(),
         }
     }
 
@@ -268,7 +267,7 @@ impl FullSchemaBuilder {
         self
     }
 
-    fn inner_build(self) -> (FullSchemaNode, TypeRegistry) {
+    fn inner_build(self) -> (FullSchemaNode, ExtensionsRegistry) {
         let typ = Type {
             kind: Some(Kind::Struct(Struct {
                 nullability: nullability(self.nullable),
@@ -287,14 +286,14 @@ impl FullSchemaBuilder {
                 r#type: typ,
                 children: self.children,
             },
-            self.type_registry,
+            self.registry,
         )
     }
 
     /// Consume the builder to create a schema
     pub fn build(self) -> SchemaInfo {
-        let (root, type_registry) = self.inner_build();
-        SchemaInfo::Full(FullSchema::new_with_types(root, type_registry))
+        let (root, registry) = self.inner_build();
+        SchemaInfo::Full(FullSchema::new_with_registry(root, registry))
     }
 }
 
@@ -764,7 +763,7 @@ impl<'a> RefBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as substrait_expr, builder::functions::FunctionsRegistry, helpers::types};
+    use crate::{self as substrait_expr, helpers::types};
     use substrait_expr_macros::names_schema;
 
     use super::*;
@@ -804,8 +803,7 @@ mod tests {
             allow_unknown_types: true,
             ..Default::default()
         };
-        let func_reg = FunctionsRegistry::new();
-        let functions = FunctionsBuilder::new(&func_reg, &schema);
+        let functions = FunctionsBuilder::new(&schema);
         let ref_builder = RefBuilder {
             schema: &schema,
             params: &params,

@@ -1,13 +1,7 @@
-use std::{collections::BTreeMap, sync::RwLock};
-
 use substrait::proto::{
-    extensions::{
-        simple_extension_declaration::{ExtensionType, MappingType},
-        SimpleExtensionDeclaration,
-    },
     r#type::{
-        Binary, Boolean, Fp32, Fp64, Kind, Nullability, String as SubstraitString, Struct,
-        UserDefined, I16, I32, I64, I8,
+        Binary, Boolean, Fp32, Fp64, Kind, Nullability, String as SubstraitString, Struct, I16,
+        I32, I64, I8,
     },
     Type,
 };
@@ -15,14 +9,14 @@ use substrait::proto::{
 use crate::error::Result;
 use crate::util::HasRequiredPropertiesRef;
 
-use super::UriRegistry;
+use super::registry::ExtensionsRegistry;
 
 /// Helper methods for substrait Type objects
 pub trait TypeExt {
     /// Return true if two types are the same "kind", ignoring nullability and type parameters
     fn same_kind(&self, other: &Type) -> Result<bool>;
     /// Returns true if this is the unknown type
-    fn is_unknown(&self) -> bool;
+    fn is_unknown(&self, registry: &ExtensionsRegistry) -> bool;
     /// Returns the total number of types (including this one) represented by this type
     ///
     /// Will return 1 if this is not a struct type
@@ -38,10 +32,16 @@ impl TypeExt for Type {
         Ok(std::mem::discriminant(self_kind) == std::mem::discriminant(other_kind))
     }
 
-    fn is_unknown(&self) -> bool {
+    fn is_unknown(&self, registry: &ExtensionsRegistry) -> bool {
         match &self.kind {
             Some(Kind::UserDefined(user_defined)) => {
-                user_defined.type_reference == UNKNOWN_TYPE_REFERENCE
+                let type_name = registry.lookup_type(user_defined.type_reference);
+                match type_name {
+                    Some(type_name) => {
+                        type_name.uri == UNKNOWN_TYPE_URI && type_name.name == UNKNOWN_TYPE_NAME
+                    }
+                    None => false,
+                }
             }
             _ => false,
         }
@@ -260,97 +260,3 @@ pub const UNKNOWN_TYPE_URI: &'static str = "https://substrait.io/types";
 pub const UNKNOWN_TYPE_NAME: &'static str = "unknown";
 /// A friendly name that indicates there is no type variation being used
 pub const NO_VARIATION: u32 = 0;
-
-// TODO: DELETE ME in favor of type registry
-pub const UNKNOWN_TYPE_REFERENCE: u32 = 1;
-pub static UNKNOWN: Type = Type {
-    kind: Some(Kind::UserDefined(UserDefined {
-        nullability: Nullability::Nullable as i32,
-        type_parameters: vec![],
-        type_reference: UNKNOWN_TYPE_REFERENCE,
-        type_variation_reference: 0,
-    })),
-};
-/// DO NOT USE THIS.  WILL GO AWAY.
-pub fn unknown() -> Type {
-    UNKNOWN.clone()
-}
-
-#[derive(PartialEq, Debug)]
-pub struct TypeRegistryRecord {
-    uri: String,
-    name: String,
-    anchor: u32,
-}
-
-#[derive(PartialEq, Debug)]
-struct TypeRegistryInternal {
-    function_map: BTreeMap<String, TypeRegistryRecord>,
-    counter: u32,
-}
-
-impl TypeRegistryInternal {
-    fn register(&mut self, uri: String, name: &str) -> u32 {
-        let key = uri.clone() + name;
-        let entry = self.function_map.entry(key);
-        entry
-            .or_insert_with(|| {
-                let anchor = self.counter;
-                self.counter += 1;
-                TypeRegistryRecord {
-                    uri: uri,
-                    name: name.to_string(),
-                    anchor,
-                }
-            })
-            .anchor
-    }
-}
-
-#[derive(Debug)]
-pub struct TypeRegistry {
-    internal: RwLock<TypeRegistryInternal>,
-}
-
-impl Default for TypeRegistry {
-    fn default() -> Self {
-        Self {
-            internal: RwLock::new(TypeRegistryInternal {
-                function_map: BTreeMap::new(),
-                counter: 1,
-            }),
-        }
-    }
-}
-
-impl PartialEq for TypeRegistry {
-    fn eq(&self, other: &Self) -> bool {
-        *self.internal.read().unwrap() == *other.internal.read().unwrap()
-    }
-}
-
-impl TypeRegistry {
-    pub fn register(&self, uri: String, name: &str) -> u32 {
-        let mut internal = self.internal.write().unwrap();
-        internal.register(uri, name)
-    }
-
-    pub fn add_to_extensions(
-        &self,
-        uris: &mut UriRegistry,
-        extensions: &mut Vec<SimpleExtensionDeclaration>,
-    ) {
-        let internal = self.internal.read().unwrap();
-        for record in internal.function_map.values() {
-            let uri_ref = uris.register(record.uri.clone());
-            let declaration = SimpleExtensionDeclaration {
-                mapping_type: Some(MappingType::ExtensionType(ExtensionType {
-                    extension_uri_reference: uri_ref,
-                    type_anchor: record.anchor,
-                    name: record.name.clone(),
-                })),
-            };
-            extensions.push(declaration);
-        }
-    }
-}

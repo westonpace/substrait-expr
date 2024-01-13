@@ -12,43 +12,8 @@
 //! extension traits for [expressions](crate::helpers::expr::ExpressionExt),
 //! [types](crate::helpers::expr::TypeExt), and [literals](crate::helpers::literals::LiteralExt)
 
-use std::collections::BTreeMap;
-
-use substrait::proto::extensions::SimpleExtensionUri;
-
 pub mod expr;
 pub mod literals;
+pub mod registry;
 pub mod schema;
 pub mod types;
-
-pub struct UriRegistry {
-    uris: BTreeMap<String, u32>,
-    counter: u32,
-}
-
-impl UriRegistry {
-    pub fn new() -> Self {
-        Self {
-            uris: BTreeMap::new(),
-            counter: 1,
-        }
-    }
-
-    pub fn register(&mut self, uri: impl Into<String>) -> u32 {
-        *self.uris.entry(uri.into()).or_insert_with(|| {
-            let next = self.counter;
-            self.counter += 1;
-            next
-        })
-    }
-
-    pub fn to_substrait(self) -> Vec<SimpleExtensionUri> {
-        self.uris
-            .into_iter()
-            .map(|entry| SimpleExtensionUri {
-                extension_uri_anchor: entry.1,
-                uri: entry.0,
-            })
-            .collect::<Vec<_>>()
-    }
-}

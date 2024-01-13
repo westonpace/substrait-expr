@@ -197,13 +197,13 @@ use crate::error::{Result, SubstraitExprError};
 use crate::helpers::expr::ExpressionExt;
 use crate::helpers::schema::SchemaInfo;
 use crate::helpers::types::TypeExt;
-use crate::helpers::UriRegistry;
 
-use self::functions::{FunctionsBuilder, FunctionsRegistry};
+use self::functions::FunctionsBuilder;
 use self::schema::RefBuilder;
 
 pub mod functions;
 pub mod schema;
+pub mod types;
 
 pub struct BuilderParams {
     pub allow_late_name_lookup: bool,
@@ -260,7 +260,6 @@ impl NamedExpression {
 /// ExtendedExpression, which holds a collection of expressions.  If you only need to serialize
 /// a single expression then you can create an ExtendedExpression that contains a single expression.
 pub struct ExpressionsBuilder {
-    functions: FunctionsRegistry,
     schema: SchemaInfo,
     params: BuilderParams,
     expressions: RefCell<Vec<NamedExpression>>,
@@ -291,7 +290,6 @@ impl IntoExprOutputNames for Vec<String> {
 impl ExpressionsBuilder {
     pub fn new(schema: SchemaInfo, params: BuilderParams) -> Self {
         Self {
-            functions: FunctionsRegistry::new(),
             schema,
             params,
             expressions: RefCell::new(Vec::new()),
@@ -303,7 +301,7 @@ impl ExpressionsBuilder {
     }
 
     pub fn functions(&self) -> FunctionsBuilder {
-        FunctionsBuilder::new(&self.functions, &self.schema)
+        FunctionsBuilder::new(&self.schema)
     }
 
     pub fn add_expression(
@@ -321,9 +319,7 @@ impl ExpressionsBuilder {
     }
 
     pub fn build(self) -> ExtendedExpression {
-        let mut uris = UriRegistry::new();
-        let mut extensions = Vec::new();
-        self.functions.add_to_extensions(&mut uris, &mut extensions);
+        let (extension_uris, extensions) = self.schema.extensions_registry().to_substrait();
         let referred_expr = self
             .expressions
             .into_inner()
@@ -335,7 +331,7 @@ impl ExpressionsBuilder {
             .collect::<Vec<_>>();
         ExtendedExpression {
             version: Some(substrait::version::version_with_producer("substrait-expr")),
-            extension_uris: uris.to_substrait(),
+            extension_uris,
             extensions,
             advanced_extensions: None,
             expected_type_urls: Vec::new(),

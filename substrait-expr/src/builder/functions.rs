@@ -1,11 +1,7 @@
-use std::{collections::BTreeMap, sync::RwLock};
+use std::collections::BTreeMap;
 
 use substrait::proto::{
     expression::{RexType, ScalarFunction},
-    extensions::{
-        simple_extension_declaration::{ExtensionFunction, MappingType},
-        SimpleExtensionDeclaration,
-    },
     function_argument::ArgType,
     Expression, FunctionArgument, FunctionOption, Type,
 };
@@ -13,9 +9,9 @@ use substrait::proto::{
 use crate::{
     error::{Result, SubstraitExprError},
     helpers::{
+        registry::ExtensionsRegistry,
         schema::SchemaInfo,
-        types::{self, unknown, TypeExt},
-        UriRegistry,
+        types::{self, TypeExt},
     },
 };
 
@@ -67,8 +63,8 @@ impl ImplementationArg {
     /// Returns true if an expression of the given type could be used as this argument
     ///
     /// There is no "enum" type so enum arguments will only recognize the string type
-    pub fn matches(&self, arg_type: &Type) -> Result<bool> {
-        if arg_type.is_unknown() {
+    pub fn matches(&self, arg_type: &Type, registry: &ExtensionsRegistry) -> Result<bool> {
+        if arg_type.is_unknown(registry) {
             Ok(true)
         } else {
             match &self.arg_type {
@@ -90,18 +86,22 @@ pub struct FunctionImplementation {
 
 impl FunctionImplementation {
     /// Returns true if expressions with types specified by `arg_types` would match this implementation
-    pub fn matches(&self, arg_types: &[Type]) -> bool {
+    pub fn matches(&self, arg_types: &[Type], registry: &ExtensionsRegistry) -> bool {
         if arg_types.len() != self.args.len() {
             false
         } else {
             self.args
                 .iter()
                 .zip(arg_types)
-                .all(|(imp_arg, arg_type)| imp_arg.matches(arg_type).unwrap_or(false))
+                .all(|(imp_arg, arg_type)| imp_arg.matches(arg_type, registry).unwrap_or(false))
         }
     }
 
-    fn relax(&self, types: Vec<Type>) -> Result<FunctionImplementation> {
+    fn relax(
+        &self,
+        types: Vec<Type>,
+        registry: &ExtensionsRegistry,
+    ) -> Result<FunctionImplementation> {
         if self.args.len() != types.len() {
             Err(SubstraitExprError::InvalidInput(format!(
                 "Attempt to relax implementation with {} args using {} types",
@@ -114,7 +114,7 @@ impl FunctionImplementation {
                 .iter()
                 .zip(types.iter())
                 .map(|(arg, typ)| {
-                    if typ.is_unknown() {
+                    if typ.is_unknown(registry) {
                         ImplementationArg {
                             name: arg.name.clone(),
                             arg_type: ImplementationArgType::Value(typ.clone()),
@@ -124,9 +124,9 @@ impl FunctionImplementation {
                     }
                 })
                 .collect::<Vec<_>>();
-            let has_unknown = types.iter().any(|typ| typ.is_unknown());
+            let has_unknown = types.iter().any(|typ| typ.is_unknown(registry));
             let output_type = if has_unknown {
-                types::unknown()
+                super::types::unknown(registry)
             } else {
                 self.output_type.clone()
             };
@@ -153,14 +153,15 @@ impl FunctionDefinition {
         args: &[Expression],
         schema: &SchemaInfo,
     ) -> Result<Option<FunctionImplementation>> {
+        let registry = schema.extensions_registry();
         let types = args
             .iter()
             .map(|arg| arg.output_type(schema))
             .collect::<Result<Vec<_>>>()?;
         self.implementations
             .iter()
-            .find(|imp| imp.matches(&types))
-            .map(|imp| imp.relax(types))
+            .find(|imp| imp.matches(&types, registry))
+            .map(|imp| imp.relax(types, registry))
             .transpose()
     }
 }
@@ -176,13 +177,12 @@ pub const LOOKUP_BY_NAME_FUNC_NAME: &'static str = "lookup_by_name";
 
 /// A builder that can create scalar function expressions
 pub struct FunctionsBuilder<'a> {
-    registry: &'a FunctionsRegistry,
     schema: &'a SchemaInfo,
 }
 
 impl<'a> FunctionsBuilder<'a> {
-    pub(crate) fn new(registry: &'a FunctionsRegistry, schema: &'a SchemaInfo) -> Self {
-        Self { registry, schema }
+    pub(crate) fn new(schema: &'a SchemaInfo) -> Self {
+        Self { schema }
     }
 
     /// Creates a new [FunctionBuilder] based on a given function definition.
@@ -197,7 +197,7 @@ impl<'a> FunctionsBuilder<'a> {
         func: &'static FunctionDefinition,
         args: Vec<Expression>,
     ) -> FunctionBuilder {
-        let func_reference = self.registry.register(func);
+        let func_reference = self.schema.extensions_registry().register_function(func);
         FunctionBuilder {
             func: func,
             func_reference,
@@ -217,15 +217,15 @@ impl<'a> FunctionsBuilder<'a> {
         let arg = FunctionArgument {
             arg_type: Some(ArgType::Enum(name.into())),
         };
-        let function_reference = self
-            .registry
-            .register_by_name(LOOKUP_BY_NAME_FUNC_URI, LOOKUP_BY_NAME_FUNC_NAME);
+        let registry = self.schema.extensions_registry();
+        let function_reference =
+            registry.register_function_by_name(LOOKUP_BY_NAME_FUNC_URI, LOOKUP_BY_NAME_FUNC_NAME);
         Expression {
             rex_type: Some(RexType::ScalarFunction(ScalarFunction {
                 arguments: vec![arg],
                 function_reference,
                 // TODO: Use the proper unknown type
-                output_type: Some(unknown()),
+                output_type: Some(super::types::unknown(registry)),
                 options: vec![],
                 ..Default::default()
             })),
@@ -297,78 +297,5 @@ impl<'a> FunctionBuilder<'a> {
                 ..Default::default()
             })),
         })
-    }
-}
-
-pub struct FunctionsRegistryRecord {
-    uri: String,
-    name: String,
-    anchor: u32,
-}
-
-struct FunctionRegistryInternal {
-    function_map: BTreeMap<String, FunctionsRegistryRecord>,
-    counter: u32,
-}
-
-impl FunctionRegistryInternal {
-    fn register(&mut self, uri: &str, name: &str) -> u32 {
-        let key = uri.to_string() + name;
-        let entry = self.function_map.entry(key);
-        entry
-            .or_insert_with(|| {
-                let counter = self.counter;
-                self.counter += 1;
-                FunctionsRegistryRecord {
-                    uri: uri.to_string(),
-                    name: name.to_string(),
-                    anchor: counter,
-                }
-            })
-            .anchor
-    }
-}
-
-pub struct FunctionsRegistry {
-    internal: RwLock<FunctionRegistryInternal>,
-}
-
-impl FunctionsRegistry {
-    pub fn new() -> Self {
-        Self {
-            internal: RwLock::new(FunctionRegistryInternal {
-                function_map: BTreeMap::new(),
-                counter: 1,
-            }),
-        }
-    }
-
-    pub fn register(&self, function: &FunctionDefinition) -> u32 {
-        let mut internal = self.internal.write().unwrap();
-        internal.register(&function.uri, &function.name)
-    }
-
-    pub(crate) fn register_by_name(&self, uri: &str, name: &str) -> u32 {
-        let mut internal = self.internal.write().unwrap();
-        internal.register(uri, name)
-    }
-
-    pub(crate) fn add_to_extensions(
-        &self,
-        uris: &mut UriRegistry,
-        extensions: &mut Vec<SimpleExtensionDeclaration>,
-    ) {
-        let internal = self.internal.read().unwrap();
-        for record in internal.function_map.values() {
-            let uri_ref = uris.register(record.uri.clone());
-            let declaration = SimpleExtensionDeclaration {
-                mapping_type: Some(MappingType::ExtensionFunction(ExtensionFunction {
-                    extension_uri_reference: uri_ref,
-                    function_anchor: record.anchor,
-                    name: record.name.clone(),
-                })),
-            };
-            extensions.push(declaration);
-        }
     }
 }
