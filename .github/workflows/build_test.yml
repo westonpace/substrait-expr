@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - uses: moonrepo/setup-rust@v1
         with:
           components: rustfmt
@@ -25,6 +27,8 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - uses: moonrepo/setup-rust@v1
         with:
           bins: cargo-make
@@ -43,6 +47,8 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - uses: moonrepo/setup-rust@v1
         with:
           bins: cargo-make, cargo-nextest
