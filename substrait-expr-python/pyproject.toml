@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.0.0"]
+build-backend = "maturin"
+
+[project]
+name = "substrait_expr"
+description = "Create and use substrait expressions"
+requires-python = ">=3.10"
+
+[tool.maturin]
+module-name = "substrait_expr._internal"
+python-source = "python"

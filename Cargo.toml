@@ -1,6 +1,11 @@
 [workspace]
 
-members = ["substrait-expr", "substrait-expr-funcgen", "substrait-expr-macros"]
+members = [
+    "substrait-expr",
+    "substrait-expr-funcgen",
+    "substrait-expr-macros",
+    "substrait-expr-python",
+]
 resolver = "2"
 
 [workspace.package]
@@ -13,5 +18,6 @@ readme = "README.md"
 description = "Utilities for working with Substrait expressions"
 
 [workspace.dependencies]
-substrait-expr-funcgen = { path = "./substrait-expr-funcgen", version = "0.1.0" }
-substrait-expr-macros = { path = "./substrait-expr-macros", version = "0.1.0" }
+substrait-expr = { path = "./substrait-expr" }
+substrait-expr-funcgen = { path = "./substrait-expr-funcgen" }
+substrait-expr-macros = { path = "./substrait-expr-macros" }

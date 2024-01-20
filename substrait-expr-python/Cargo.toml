@@ -1,0 +1,13 @@
+[package]
+name = "substrait-expr-python"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description.workspace = true
+
+[dependencies]
+pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py310"] }
+substrait-expr.workspace = true
