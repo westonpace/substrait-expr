@@ -1,3 +1,5 @@
+use std::ptr::null;
+
 use substrait::proto::{
     r#type::{
         Binary, Boolean, Fp32, Fp64, Kind, Nullability, String as SubstraitString, Struct, I16,
@@ -23,6 +25,63 @@ pub trait TypeExt {
     fn num_types(&self) -> u32;
     /// Returns the child types
     fn children(&self) -> Vec<&Type>;
+    /// Returns a human readable name for the type
+    ///
+    /// The syntax for this is defined at https://substrait.io/types/type_parsing/#type-syntax-parsing
+    fn to_human_readable(&self, registry: &ExtensionsRegistry) -> String;
+}
+
+// For some reason, prost is giving us i32 for nullability
+const NULLABLE: i32 = Nullability::Nullable as i32;
+const REQUIRED: i32 = Nullability::Required as i32;
+const UNSPECIFIED: i32 = Nullability::Unspecified as i32;
+
+fn null_str(nullability: i32) -> &'static str {
+    match nullability {
+        NULLABLE => "?",
+        REQUIRED => "",
+        _ => "INVALID-NULLABILITY",
+    }
+}
+
+fn vari_str(variation_reference: u32, registry: &ExtensionsRegistry) -> String {
+    if variation_reference == NO_VARIATION {
+        String::new()
+    } else {
+        let qualified_name = registry.lookup_variation(variation_reference);
+        if let Some(qualified_name) = qualified_name {
+            format!("[{}#{}]", qualified_name.uri, qualified_name.name)
+        } else {
+            "[unknown_variation]".to_string()
+        }
+    }
+}
+
+// Helper macro that converts input to {}
+macro_rules! hug {
+    ($e:expr) => {
+        "{}"
+    };
+}
+
+// If there are any arguments it yields <{},{},...,{}>
+// If there are no arguments it is the empty string
+macro_rules! params_format_str {
+    () => {""};
+    ($first:expr$(, $param:expr),*) => {
+        concat!("<",hug!($first) $(,",",hug!($param)),*, ">")
+    }
+}
+
+macro_rules! readify {
+    ($name:literal, $e:expr, $reg:expr $(, $param:expr)*) => {
+        format!(
+            concat!($name, "{}{}", params_format_str!($($param),*)),
+            null_str($e.nullability),
+            vari_str($e.type_variation_reference, $reg),
+            $($param),*
+        )
+    };
 }
 
 impl TypeExt for Type {
@@ -60,6 +119,34 @@ impl TypeExt for Type {
         match &self.kind {
             Some(Kind::Struct(strct)) => strct.types.iter().collect(),
             _ => vec![],
+        }
+    }
+
+    fn to_human_readable(&self, registry: &ExtensionsRegistry) -> String {
+        if let Some(kind) = &self.kind {
+            match kind {
+                Kind::Binary(binary) => readify!("binary", binary, registry),
+                Kind::Bool(bool) => readify!("bool", bool, registry),
+                Kind::Date(date) => readify!("date", date, registry),
+                Kind::Decimal(decimal) => readify!(
+                    "decimal",
+                    decimal,
+                    registry,
+                    decimal.precision,
+                    decimal.scale
+                ),
+                Kind::FixedBinary(fixed_binary) => {
+                    readify!("fixedbinary", fixed_binary, registry, fixed_binary.length)
+                }
+                Kind::FixedChar(fixed_char) => {
+                    readify!("fixedchar", fixed_char, registry, fixed_char.length)
+                }
+                Kind::Fp32(fp32) => readify!("fp32", fp32, registry),
+                Kind::Fp64(fp64) => readify!("fp64", fp64, registry),
+                _ => todo!(),
+            }
+        } else {
+            "invalid-type".to_string()
         }
     }
 }
@@ -260,3 +347,74 @@ pub const UNKNOWN_TYPE_URI: &'static str = "https://substrait.io/types";
 pub const UNKNOWN_TYPE_NAME: &'static str = "unknown";
 /// A friendly name that indicates there is no type variation being used
 pub const NO_VARIATION: u32 = 0;
+
+#[cfg(test)]
+mod tests {
+    use substrait::proto::{
+        r#type::{Binary, Decimal, Kind},
+        Type,
+    };
+
+    use crate::helpers::{
+        registry::ExtensionsRegistry,
+        types::{nullability, TypeExt, NO_VARIATION},
+    };
+
+    #[test]
+    fn test_human_readable() {
+        let reg = ExtensionsRegistry::default();
+        let my_variation = reg.register_variation("my_uri".to_string(), "my_variation");
+        assert_eq!(
+            "binary",
+            Type {
+                kind: Some(Kind::Binary(Binary {
+                    type_variation_reference: NO_VARIATION,
+                    nullability: nullability(false)
+                }))
+            }
+            .to_human_readable(&reg)
+        );
+        assert_eq!(
+            "binary?",
+            Type {
+                kind: Some(Kind::Binary(Binary {
+                    type_variation_reference: NO_VARIATION,
+                    nullability: nullability(true)
+                }))
+            }
+            .to_human_readable(&reg)
+        );
+        assert_eq!(
+            "binary?[my_uri#my_variation]",
+            Type {
+                kind: Some(Kind::Binary(Binary {
+                    type_variation_reference: my_variation,
+                    nullability: nullability(true)
+                }))
+            }
+            .to_human_readable(&reg)
+        );
+        assert_eq!(
+            "binary?[unknown_variation]",
+            Type {
+                kind: Some(Kind::Binary(Binary {
+                    type_variation_reference: 5,
+                    nullability: nullability(true)
+                }))
+            }
+            .to_human_readable(&reg)
+        );
+        assert_eq!(
+            "decimal?<38,6>",
+            Type {
+                kind: Some(Kind::Decimal(Decimal {
+                    type_variation_reference: NO_VARIATION,
+                    nullability: nullability(true),
+                    precision: 38,
+                    scale: 6
+                }))
+            }
+            .to_human_readable(&reg)
+        );
+    }
+}

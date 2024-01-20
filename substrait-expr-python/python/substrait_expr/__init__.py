@@ -1,4 +1,4 @@
 from . import _internal
 
-def foo():
-    _internal.guess_the_number()
+def types_schema() -> _internal.TypesOnlySchemaBuilder:
+    return _internal.TypesOnlySchemaBuilder()

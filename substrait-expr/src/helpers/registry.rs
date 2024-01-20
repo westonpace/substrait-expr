@@ -1,7 +1,9 @@
 use std::{collections::BTreeMap, sync::RwLock};
 
 use substrait::proto::extensions::{
-    simple_extension_declaration::{ExtensionFunction, ExtensionType, MappingType},
+    simple_extension_declaration::{
+        ExtensionFunction, ExtensionType, ExtensionTypeVariation, MappingType,
+    },
     SimpleExtensionDeclaration, SimpleExtensionUri,
 };
 
@@ -20,8 +22,8 @@ impl std::fmt::Display for QualifiedName {
     }
 }
 
+// These records are used for both types and type variations
 #[derive(PartialEq, Clone, Debug)]
-
 struct TypeRecord {
     uri: String,
     name: String,
@@ -73,6 +75,8 @@ struct RegistryInternal {
     functions_inverse: BTreeMap<u32, FunctionRecord>,
     types: BTreeMap<String, TypeRecord>,
     types_inverse: BTreeMap<u32, TypeRecord>,
+    variations: BTreeMap<String, TypeRecord>,
+    variations_inverse: BTreeMap<u32, TypeRecord>,
     counter: u32,
 }
 
@@ -82,6 +86,15 @@ impl RegistryInternal {
             uri: record.uri.clone(),
             name: record.name.clone(),
         })
+    }
+
+    pub fn lookup_variation(&self, anchor: u32) -> Option<QualifiedName> {
+        self.variations_inverse
+            .get(&anchor)
+            .map(|record| QualifiedName {
+                uri: record.uri.clone(),
+                name: record.name.clone(),
+            })
     }
 
     pub fn lookup_function(&self, anchor: u32) -> Option<QualifiedName> {
@@ -107,6 +120,24 @@ impl RegistryInternal {
                 };
                 self.types_inverse.insert(anchor, type_record.clone());
                 type_record
+            })
+            .anchor
+    }
+
+    fn register_variation(&mut self, uri: String, name: &str) -> u32 {
+        let key = uri.clone() + name;
+        let entry = self.variations.entry(key);
+        entry
+            .or_insert_with(|| {
+                let anchor = self.counter;
+                self.counter += 1;
+                let var_record = TypeRecord {
+                    uri: uri,
+                    name: name.to_string(),
+                    anchor,
+                };
+                self.variations_inverse.insert(anchor, var_record.clone());
+                var_record
             })
             .anchor
     }
@@ -156,6 +187,8 @@ impl Default for ExtensionsRegistry {
                 types: BTreeMap::new(),
                 functions_inverse: BTreeMap::new(),
                 types_inverse: BTreeMap::new(),
+                variations: BTreeMap::new(),
+                variations_inverse: BTreeMap::new(),
                 counter: 1,
             }),
         }
@@ -175,6 +208,14 @@ impl ExtensionsRegistry {
     pub fn register_type(&self, uri: String, name: &str) -> u32 {
         let mut internal = self.internal.write().unwrap();
         internal.register_type(uri, name)
+    }
+
+    /// Registers a new type variation with the extensions registry and returns an anchor to use
+    ///
+    /// If this is called multiple times with the same uri/name it will return the same anchor
+    pub fn register_variation(&self, uri: String, name: &str) -> u32 {
+        let mut internal = self.internal.write().unwrap();
+        internal.register_variation(uri, name)
     }
 
     /// Registers a new function with the extensions registry and returns an anchor to use
@@ -199,6 +240,12 @@ impl ExtensionsRegistry {
         internal.lookup_type(anchor)
     }
 
+    /// Looks up the qualified name that corresponds to a variation anchor
+    pub fn lookup_variation(&self, anchor: u32) -> Option<QualifiedName> {
+        let internal = self.internal.read().unwrap();
+        internal.lookup_variation(anchor)
+    }
+
     /// Looks up the qualified name that corresponds to a function anchor
     pub fn lookup_function(&self, anchor: u32) -> Option<QualifiedName> {
         let internal = self.internal.read().unwrap();
@@ -219,6 +266,27 @@ impl ExtensionsRegistry {
                     type_anchor: record.anchor,
                     name: record.name.clone(),
                 })),
+            };
+            extensions.push(declaration);
+        }
+    }
+
+    fn add_variations(
+        &self,
+        internal: &RegistryInternal,
+        uris: &mut UriLookup,
+        extensions: &mut Vec<SimpleExtensionDeclaration>,
+    ) {
+        for record in internal.variations.values() {
+            let uri_ref = uris.register(record.uri.clone());
+            let declaration = SimpleExtensionDeclaration {
+                mapping_type: Some(MappingType::ExtensionTypeVariation(
+                    ExtensionTypeVariation {
+                        extension_uri_reference: uri_ref,
+                        type_variation_anchor: record.anchor,
+                        name: record.name.clone(),
+                    },
+                )),
             };
             extensions.push(declaration);
         }
@@ -252,6 +320,7 @@ impl ExtensionsRegistry {
         let internal = self.internal.read().unwrap();
 
         self.add_types(&internal, &mut uris, &mut extensions);
+        self.add_variations(&internal, &mut uris, &mut extensions);
         self.add_functions(&internal, &mut uris, &mut extensions);
 
         let uris = uris.to_substrait();

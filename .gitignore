@@ -16,3 +16,6 @@ Cargo.lock
 # Built artifacts from maturin
 **/*.so
 **/__pycache__
+
+# VSCode
+.vscode/

@@ -24,6 +24,13 @@ impl TypeBuilderFactory for builder::schema::TypesOnlySchemaBuilder {
 
 #[pymethods]
 impl TypesOnlySchemaBuilder {
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(builder::schema::TypesOnlySchemaBuilder::new()),
+        }
+    }
+
     pub fn types(&self) -> TypeBuilder {
         TypeBuilder {
             inner: self.inner.clone(),
@@ -47,24 +54,17 @@ struct TypeBuilder {
 
 #[pymethods]
 impl TypeBuilder {
-    pub fn int8(&self, nullable: bool) -> SubstraitType {
+    pub fn int8(&self, nullable: Option<bool>) -> SubstraitType {
         SubstraitType {
-            inner: helpers::types::i8(nullable),
+            inner: helpers::types::i8(nullable.unwrap_or(true)),
         }
-    }
-}
-
-#[pyfunction]
-fn types_schema() -> TypesOnlySchemaBuilder {
-    TypesOnlySchemaBuilder {
-        inner: Arc::new(builder::schema::TypesOnlySchemaBuilder::new()),
     }
 }
 
 #[pymodule]
 fn _internal(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<SubstraitType>()?;
     m.add_class::<TypeBuilder>()?;
     m.add_class::<TypesOnlySchemaBuilder>()?;
-    m.add_function(wrap_pyfunction!(types_schema, m)?)?;
     Ok(())
 }
