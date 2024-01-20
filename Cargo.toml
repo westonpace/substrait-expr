@@ -21,3 +21,4 @@ description = "Utilities for working with Substrait expressions"
 substrait-expr = { path = "./substrait-expr" }
 substrait-expr-funcgen = { path = "./substrait-expr-funcgen" }
 substrait-expr-macros = { path = "./substrait-expr-macros" }
+substrait = "0.20.2"
