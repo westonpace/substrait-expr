@@ -5,6 +5,8 @@ use substrait::proto::Type;
 use substrait_expr::builder;
 use substrait_expr::builder::ExpressionsBuilder as InnerExpressionsBuilder;
 use substrait_expr::helpers;
+use substrait_expr::helpers::registry::ExtensionsRegistry;
+use substrait_expr::helpers::types::TypeExt;
 
 #[pyclass]
 struct ExpressionsBuilder {
@@ -14,6 +16,7 @@ struct ExpressionsBuilder {
 #[pyclass]
 struct TypesOnlySchemaBuilder {
     inner: Arc<builder::schema::TypesOnlySchemaBuilder>,
+    registry: Arc<helpers::registry::ExtensionsRegistry>,
 }
 
 impl TypeBuilderFactory for builder::schema::TypesOnlySchemaBuilder {
@@ -26,14 +29,19 @@ impl TypeBuilderFactory for builder::schema::TypesOnlySchemaBuilder {
 impl TypesOnlySchemaBuilder {
     #[new]
     pub fn new() -> Self {
+        let registry = Arc::new(helpers::registry::ExtensionsRegistry::default());
         Self {
-            inner: Arc::new(builder::schema::TypesOnlySchemaBuilder::new()),
+            inner: Arc::new(builder::schema::TypesOnlySchemaBuilder::new_with_types(
+                registry.clone(),
+            )),
+            registry,
         }
     }
 
     pub fn types(&self) -> TypeBuilder {
         TypeBuilder {
             inner: self.inner.clone(),
+            registry: self.registry.clone(),
         }
     }
 }
@@ -41,6 +49,14 @@ impl TypesOnlySchemaBuilder {
 #[pyclass]
 struct SubstraitType {
     inner: Type,
+    registry: Arc<ExtensionsRegistry>,
+}
+
+#[pymethods]
+impl SubstraitType {
+    fn __repr__(&self) -> String {
+        self.inner.to_human_readable(&self.registry)
+    }
 }
 
 trait TypeBuilderFactory {
@@ -50,6 +66,7 @@ trait TypeBuilderFactory {
 #[pyclass]
 struct TypeBuilder {
     inner: Arc<dyn TypeBuilderFactory + Send + Sync>,
+    registry: Arc<ExtensionsRegistry>,
 }
 
 #[pymethods]
@@ -57,6 +74,7 @@ impl TypeBuilder {
     pub fn int8(&self, nullable: Option<bool>) -> SubstraitType {
         SubstraitType {
             inner: helpers::types::i8(nullable.unwrap_or(true)),
+            registry: self.registry.clone(),
         }
     }
 }

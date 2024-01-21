@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 use std::str::Chars;
+use std::sync::Arc;
 
 use substrait::proto::expression::field_reference::{RootReference, RootType};
 use substrait::proto::expression::reference_segment::{
@@ -87,7 +88,7 @@ impl<'a> TypeBuilder<'a> {
 /// A builder for creating a types-only schema
 pub struct TypesOnlySchemaBuilder {
     children: Vec<Type>,
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
 }
 
 impl TypesOnlySchemaBuilder {
@@ -95,7 +96,7 @@ impl TypesOnlySchemaBuilder {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
@@ -103,7 +104,7 @@ impl TypesOnlySchemaBuilder {
     ///
     /// This is an advanced case and only needed if you are trying to maintain type
     /// anchors.
-    pub fn new_with_types(registry: ExtensionsRegistry) -> Self {
+    pub fn new_with_types(registry: Arc<ExtensionsRegistry>) -> Self {
         Self {
             children: Vec::new(),
             registry,
@@ -135,7 +136,7 @@ impl TypesOnlySchemaBuilder {
         }
     }
 
-    fn inner_build(self) -> (Struct, ExtensionsRegistry) {
+    fn inner_build(self) -> (Struct, Arc<ExtensionsRegistry>) {
         (
             Struct {
                 types: self.children,
@@ -163,7 +164,7 @@ impl TypesOnlySchemaBuilder {
 /// A builder object for a names-only schema
 pub struct NamesOnlySchemaNodeBuilder {
     children: Vec<NamesOnlySchemaNode>,
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
 }
 
 impl NamesOnlySchemaNodeBuilder {
@@ -171,7 +172,7 @@ impl NamesOnlySchemaNodeBuilder {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
@@ -179,7 +180,7 @@ impl NamesOnlySchemaNodeBuilder {
     ///
     /// This is an advanced case and only needed if you are trying to maintain type
     /// anchors.
-    pub fn new_with_types(registry: ExtensionsRegistry) -> Self {
+    pub fn new_with_types(registry: Arc<ExtensionsRegistry>) -> Self {
         Self {
             children: Vec::new(),
             registry,
@@ -227,7 +228,7 @@ pub struct FullSchemaBuilder {
     nullable: bool,
     name: String,
     children: Vec<FullSchemaNode>,
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
 }
 
 impl FullSchemaBuilder {
@@ -237,7 +238,7 @@ impl FullSchemaBuilder {
             nullable,
             name,
             children: Vec::new(),
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
@@ -267,7 +268,7 @@ impl FullSchemaBuilder {
         self
     }
 
-    fn inner_build(self) -> (FullSchemaNode, ExtensionsRegistry) {
+    fn inner_build(self) -> (FullSchemaNode, Arc<ExtensionsRegistry>) {
         let typ = Type {
             kind: Some(Kind::Struct(Struct {
                 nullability: nullability(self.nullable),

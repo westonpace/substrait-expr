@@ -2,8 +2,8 @@ use std::ptr::null;
 
 use substrait::proto::{
     r#type::{
-        Binary, Boolean, Fp32, Fp64, Kind, Nullability, String as SubstraitString, Struct, I16,
-        I32, I64, I8,
+        parameter::Parameter, Binary, Boolean, Fp32, Fp64, Kind, Nullability,
+        String as SubstraitString, Struct, I16, I32, I64, I8,
     },
     Type,
 };
@@ -34,7 +34,6 @@ pub trait TypeExt {
 // For some reason, prost is giving us i32 for nullability
 const NULLABLE: i32 = Nullability::Nullable as i32;
 const REQUIRED: i32 = Nullability::Required as i32;
-const UNSPECIFIED: i32 = Nullability::Unspecified as i32;
 
 fn null_str(nullability: i32) -> &'static str {
     match nullability {
@@ -143,6 +142,92 @@ impl TypeExt for Type {
                 }
                 Kind::Fp32(fp32) => readify!("fp32", fp32, registry),
                 Kind::Fp64(fp64) => readify!("fp64", fp64, registry),
+                Kind::I16(i16) => readify!("i16", i16, registry),
+                Kind::I32(i32) => readify!("i32", i32, registry),
+                Kind::I64(i64) => readify!("i64", i64, registry),
+                Kind::I8(i8) => readify!("i8", i8, registry),
+                Kind::IntervalDay(interval_day) => readify!("interval_day", interval_day, registry),
+                Kind::IntervalYear(interval_year) => {
+                    readify!("interval_year", interval_year, registry)
+                }
+                Kind::List(list) => {
+                    readify!(
+                        "list",
+                        list,
+                        registry,
+                        list.r#type
+                            .as_ref()
+                            .map(|typ| typ.to_human_readable(registry))
+                            .unwrap_or("invalid_inner_type".to_string())
+                    )
+                }
+                Kind::Map(map) => {
+                    readify!(
+                        "map",
+                        map,
+                        registry,
+                        map.key
+                            .as_ref()
+                            .map(|key| key.to_human_readable(registry))
+                            .unwrap_or("invalid_key_type".to_string()),
+                        map.value
+                            .as_ref()
+                            .map(|val| val.to_human_readable(registry))
+                            .unwrap_or("invalid_value_type".to_string())
+                    )
+                }
+                Kind::String(string) => readify!("string", string, registry),
+                Kind::Struct(strct) => {
+                    let child_types = strct
+                        .types
+                        .iter()
+                        .map(|typ| typ.to_human_readable(registry))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!(
+                        "struct{}{}<{}>",
+                        null_str(strct.nullability),
+                        vari_str(strct.type_variation_reference, registry),
+                        child_types
+                    )
+                }
+                Kind::Time(time) => readify!("time", time, registry),
+                Kind::Timestamp(timestamp) => readify!("timestamp", timestamp, registry),
+                Kind::TimestampTz(timestamp_tz) => readify!("timestamp_tz", timestamp_tz, registry),
+                Kind::UserDefined(user_defined) => {
+                    let params = user_defined
+                        .type_parameters
+                        .iter()
+                        .map(|param| match &param.parameter {
+                            None => "invalid_type_parameter".to_string(),
+                            Some(Parameter::DataType(typ)) => typ.to_human_readable(registry),
+                            Some(Parameter::Boolean(bool)) => bool.to_string(),
+                            Some(Parameter::Enum(val)) => val.clone(),
+                            Some(Parameter::Integer(i)) => i.to_string(),
+                            Some(Parameter::Null(_)) => "null".to_string(),
+                            Some(Parameter::String(str)) => str.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    let qualified_name = registry.lookup_type(user_defined.type_reference);
+                    let name = if let Some(qualified_name) = qualified_name {
+                        format!("{}#{}", qualified_name.uri, qualified_name.name)
+                    } else {
+                        "unknown_user_defined_type".to_string()
+                    };
+                    let params = if params.is_empty() {
+                        "".to_string()
+                    } else {
+                        format!("<{}>", params)
+                    };
+                    format!(
+                        "{}{}{}{}",
+                        name,
+                        null_str(user_defined.nullability),
+                        vari_str(user_defined.type_variation_reference, registry),
+                        params
+                    )
+                }
                 _ => todo!(),
             }
         } else {
@@ -351,7 +436,7 @@ pub const NO_VARIATION: u32 = 0;
 #[cfg(test)]
 mod tests {
     use substrait::proto::{
-        r#type::{Binary, Decimal, Kind},
+        r#type::{Binary, Decimal, FixedChar, Kind, List},
         Type,
     };
 
@@ -416,5 +501,22 @@ mod tests {
             }
             .to_human_readable(&reg)
         );
+        assert_eq!(
+            "list?<fixedchar<8>>",
+            Type {
+                kind: Some(Kind::List(Box::new(List {
+                    type_variation_reference: NO_VARIATION,
+                    nullability: nullability(true),
+                    r#type: Some(Box::new(Type {
+                        kind: Some(Kind::FixedChar(FixedChar {
+                            type_variation_reference: NO_VARIATION,
+                            nullability: nullability(false),
+                            length: 8,
+                        }))
+                    }))
+                })))
+            }
+            .to_human_readable(&reg)
+        )
     }
 }

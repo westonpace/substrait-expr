@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use substrait::proto::{
     expression::{reference_segment::ReferenceType, ReferenceSegment},
     r#type::Struct,
@@ -20,7 +22,7 @@ use super::{
 /// how many fields there are.
 #[derive(Debug, Default, PartialEq)]
 pub struct EmptySchema {
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
 }
 
 /// A field in a names-only schema
@@ -41,7 +43,7 @@ pub struct NamesOnlySchemaNode {
 /// a single (possibly nested) column
 #[derive(PartialEq, Debug)]
 pub struct NamesOnlySchema {
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
     /// The root node of the schema
     pub root: NamesOnlySchemaNode,
 }
@@ -54,14 +56,14 @@ impl NamesOnlySchema {
                 name: String::new(),
                 children: root_nodes,
             },
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
     /// Create a names-only schema with the given registry
     pub fn new_with_registry(
         root_nodes: Vec<NamesOnlySchemaNode>,
-        registry: ExtensionsRegistry,
+        registry: Arc<ExtensionsRegistry>,
     ) -> Self {
         Self {
             root: NamesOnlySchemaNode {
@@ -114,7 +116,7 @@ impl<'a> Iterator for NamesOnlySchemaNodeNamesDfsIter<'a> {
 /// A schema that knows the types (but not names) of its fields
 #[derive(Debug, PartialEq)]
 pub struct TypesOnlySchema {
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
     /// The root node of the schema
     pub root: Struct,
 }
@@ -124,12 +126,12 @@ impl TypesOnlySchema {
     pub fn new(root: Struct) -> Self {
         Self {
             root,
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
     /// Create a types-only schema with a given registry
-    pub fn new_with_registry(root: Struct, registry: ExtensionsRegistry) -> Self {
+    pub fn new_with_registry(root: Struct, registry: Arc<ExtensionsRegistry>) -> Self {
         Self { root, registry }
     }
 }
@@ -150,7 +152,7 @@ pub struct FullSchemaNode {
 /// A schema that knows both the types and names of its fields
 #[derive(Debug, PartialEq)]
 pub struct FullSchema {
-    registry: ExtensionsRegistry,
+    registry: Arc<ExtensionsRegistry>,
     /// The root node of the schema
     pub root: FullSchemaNode,
 }
@@ -160,12 +162,12 @@ impl FullSchema {
     pub fn new(root: FullSchemaNode) -> Self {
         Self {
             root,
-            registry: ExtensionsRegistry::default(),
+            registry: Arc::new(ExtensionsRegistry::default()),
         }
     }
 
     /// Create a full schema with the given registry
-    pub fn new_with_registry(root: FullSchemaNode, registry: ExtensionsRegistry) -> Self {
+    pub fn new_with_registry(root: FullSchemaNode, registry: Arc<ExtensionsRegistry>) -> Self {
         Self { root, registry }
     }
 }
@@ -234,7 +236,7 @@ impl SchemaInfo {
     ///
     /// This registry keeps track of the user defined types
     /// that are referenced by the schema
-    pub fn extensions_registry(&self) -> &ExtensionsRegistry {
+    pub fn extensions_registry(&self) -> &Arc<ExtensionsRegistry> {
         match self {
             SchemaInfo::Empty(schm) => &schm.registry,
             SchemaInfo::Names(schm) => &schm.registry,
