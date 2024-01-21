@@ -85,6 +85,16 @@ impl<'a> TypeBuilder<'a> {
     }
 }
 
+pub trait TypeBuilderExt {
+    fn types(&self) -> TypeBuilder;
+}
+
+impl TypeBuilderExt for ExtensionsRegistry {
+    fn types(&self) -> TypeBuilder {
+        TypeBuilder { registry: self }
+    }
+}
+
 /// A builder for creating a types-only schema
 pub struct TypesOnlySchemaBuilder {
     children: Vec<Type>,
@@ -112,16 +122,20 @@ impl TypesOnlySchemaBuilder {
     }
 
     /// Add a new leaf field to the schema of the given type
-    pub fn field(mut self, typ: Type) -> Self {
+    pub fn field(&mut self, typ: Type) -> &mut Self {
         self.children.push(typ);
         self
     }
 
     /// Add a new struct field to the schema
-    pub fn nested(self, nullable: bool, build_func: impl FnOnce(Self) -> Self) -> Self {
-        // TODO: Nested type registry needs to be incorporated into parent
-        let nested_builder = build_func(Self::new());
-        let types = nested_builder.build();
+    pub fn nested(
+        &mut self,
+        nullable: bool,
+        build_func: impl FnOnce(&mut Self) -> &mut Self,
+    ) -> &mut Self {
+        let mut inner_builder = Self::new_with_types(self.registry.clone());
+        build_func(&mut inner_builder);
+        let types = inner_builder.build();
         if let SchemaInfo::Types(type_info) = types {
             let typ = Type {
                 kind: Some(Kind::Struct(Struct {
@@ -188,7 +202,7 @@ impl NamesOnlySchemaNodeBuilder {
     }
 
     /// Add a new leaf field to the schema with the given name
-    pub fn field(mut self, name: impl Into<String>) -> Self {
+    pub fn field(&mut self, name: impl Into<String>) -> &mut Self {
         self.children.push(NamesOnlySchemaNode {
             name: name.into(),
             children: Vec::new(),
@@ -198,11 +212,13 @@ impl NamesOnlySchemaNodeBuilder {
 
     /// Add a new struct field to the schema with the given name
     pub fn nested(
-        mut self,
+        &mut self,
         name: impl Into<String>,
-        build_func: impl FnOnce(Self) -> Self,
-    ) -> Self {
-        let built = build_func(Self::new()).build();
+        build_func: impl FnOnce(&mut Self) -> &mut Self,
+    ) -> &mut Self {
+        let mut inner_builder = Self::new_with_types(self.registry.clone());
+        build_func(&mut inner_builder);
+        let built = inner_builder.build();
         if let SchemaInfo::Names(built) = built {
             self.children.push(NamesOnlySchemaNode {
                 name: name.into(),
@@ -243,7 +259,7 @@ impl FullSchemaBuilder {
     }
 
     /// Add a leaf field with the given name and type
-    pub fn field(mut self, name: impl Into<String>, typ: Type) -> Self {
+    pub fn field(&mut self, name: impl Into<String>, typ: Type) -> &mut Self {
         if let Some(Kind::Struct(_)) = typ.kind {
             panic!("FullSchemaBuilder::field was called with a struct.  Use FullSchemaBuilder::nested to create nested types");
         }
@@ -257,13 +273,15 @@ impl FullSchemaBuilder {
 
     /// Add a struct field with the given name and children
     pub fn nested(
-        mut self,
+        &mut self,
         name: impl Into<String>,
         nullable: bool,
-        build_func: impl FnOnce(Self) -> Self,
-    ) -> Self {
+        build_func: impl FnOnce(&mut Self) -> &mut Self,
+    ) -> &mut Self {
         // TODO: Merge type registry
-        let (root, _) = build_func(Self::new(nullable, name.into())).inner_build();
+        let mut inner_builder = Self::new(nullable, name.into());
+        build_func(&mut inner_builder);
+        let (root, _) = inner_builder.inner_build();
         self.children.push(root);
         self
     }
@@ -784,10 +802,11 @@ mod tests {
                 y: {}
             }
         });
-        let built = SchemaInfo::new_names()
+        let mut builder = SchemaInfo::new_names();
+        builder
             .field("score")
-            .nested("location", |builder| builder.field("x").field("y"))
-            .build();
+            .nested("location", |builder| builder.field("x").field("y"));
+        let built = builder.build();
         assert_eq!(expected, built);
     }
 
@@ -854,7 +873,7 @@ mod tests {
         let types = schema.types_dfs(true).collect::<Vec<_>>();
         let expected = vec![
             types::i32(false),
-            types::struct_(false, vec![types::fp32(false), types::fp64(true)]),
+            types::struct_(vec![types::fp32(false), types::fp64(true)], false),
             types::fp32(false),
             types::fp64(true),
         ];

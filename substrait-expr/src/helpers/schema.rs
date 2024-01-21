@@ -85,11 +85,11 @@ impl NamesOnlySchemaNode {
             unknown_type.clone()
         } else {
             types::struct_(
-                true,
                 self.children
                     .iter()
                     .map(|child| child.as_type(unknown_type))
                     .collect::<Vec<_>>(),
+                true,
             )
         }
     }

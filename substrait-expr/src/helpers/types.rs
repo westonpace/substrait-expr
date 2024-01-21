@@ -1,14 +1,12 @@
-use std::ptr::null;
-
 use substrait::proto::{
     r#type::{
-        parameter::Parameter, Binary, Boolean, Fp32, Fp64, Kind, Nullability,
-        String as SubstraitString, Struct, I16, I32, I64, I8,
+        parameter::Parameter, Decimal, FixedBinary, FixedChar, Kind, List, Map, Nullability,
+        Struct, VarChar,
     },
     Type,
 };
 
-use crate::error::Result;
+use crate::error::{Result, SubstraitExprError};
 use crate::util::HasRequiredPropertiesRef;
 
 use super::registry::ExtensionsRegistry;
@@ -228,7 +226,13 @@ impl TypeExt for Type {
                         params
                     )
                 }
-                _ => todo!(),
+                Kind::UserDefinedTypeReference(_) => panic!(
+                    "substrait-expr does not support the legacy UserDefinedTypeReference message"
+                ),
+                Kind::Uuid(uuid) => readify!("uuid", uuid, registry),
+                Kind::Varchar(varchar) => {
+                    readify!("varchar", varchar, registry, varchar.length)
+                }
             }
         } else {
             "invalid-type".to_string()
@@ -255,125 +259,72 @@ pub trait TypeInfer {
     fn as_substrait(nullable: bool) -> Type;
 }
 
+macro_rules! simple_type {
+    ($kind:ident, $typname:ident, $nullable:expr) => {
+        Type {
+            kind: Some(substrait::proto::r#type::Kind::$kind(
+                substrait::proto::r#type::$typname {
+                    nullability: nullability($nullable),
+                    type_variation_reference: NO_VARIATION,
+                },
+            )),
+        }
+    };
+}
+
+macro_rules! simple_infer {
+    ($kind:ident) => {
+        simple_infer!($kind, $kind);
+    };
+    ($kind:ident, $typname: ident) => {
+        fn as_substrait(nullable: bool) -> Type {
+            simple_type!($kind, $typname, nullable)
+        }
+    };
+}
+
 impl TypeInfer for i8 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::I8(I8 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(I8);
 }
-
 impl TypeInfer for i16 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::I16(I16 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(I16);
 }
-
 impl TypeInfer for i32 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::I32(I32 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(I32);
 }
-
 impl TypeInfer for i64 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::I64(I64 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(I64);
 }
-
 impl TypeInfer for bool {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::Bool(Boolean {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(Bool, Boolean);
 }
-
 impl TypeInfer for f32 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::Fp32(Fp32 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(Fp32);
 }
-
 impl TypeInfer for f64 {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::Fp64(Fp64 {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(Fp64);
 }
-
 impl TypeInfer for String {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::String(SubstraitString {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(String);
 }
-
 impl TypeInfer for &str {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::String(SubstraitString {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(String);
 }
-
 impl TypeInfer for &[u8] {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::Binary(Binary {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+    simple_infer!(Binary);
+}
+impl TypeInfer for Vec<u8> {
+    simple_infer!(Binary);
 }
 
-impl TypeInfer for Vec<u8> {
-    fn as_substrait(nullable: bool) -> Type {
-        Type {
-            kind: Some(substrait::proto::r#type::Kind::Binary(Binary {
-                nullability: nullability(nullable),
-                type_variation_reference: 0,
-            })),
-        }
-    }
+#[cfg(feature = "chrono")]
+impl TypeInfer for chrono::naive::NaiveDate {
+    simple_infer!(Date);
+}
+
+#[cfg(feature = "chrono")]
+impl TypeInfer for chrono::naive::NaiveTime {
+    simple_infer!(Time);
 }
 
 /// Create a substrait type from a rust type
@@ -416,13 +367,150 @@ pub fn string(nullable: bool) -> Type {
 pub fn binary(nullable: bool) -> Type {
     from_rust::<&[u8]>(nullable)
 }
+/// Create an instance of the timestamp type
+pub fn timestamp(nullable: bool) -> Type {
+    simple_type!(Timestamp, Timestamp, nullable)
+}
+/// Create an instance of the timestamp_tz type
+pub fn timestamp_tz(nullable: bool) -> Type {
+    simple_type!(TimestampTz, TimestampTz, nullable)
+}
+/// Create an instance of the date type
+pub fn date(nullable: bool) -> Type {
+    simple_type!(Date, Date, nullable)
+}
+/// Create an instance of the time type
+pub fn time(nullable: bool) -> Type {
+    simple_type!(Time, Time, nullable)
+}
+/// Create an instance of the interval_year type
+pub fn interval_year(nullable: bool) -> Type {
+    simple_type!(IntervalYear, IntervalYear, nullable)
+}
+/// Create an instance of the interval_day type
+pub fn interval_day(nullable: bool) -> Type {
+    simple_type!(IntervalDay, IntervalDay, nullable)
+}
+/// Create an instance of the uuid type
+pub fn uuid(nullable: bool) -> Type {
+    simple_type!(Uuid, Uuid, nullable)
+}
+/// Create an instance of the fixed char type
+///
+/// Although length is a u32 the range allowed by Substrait is only those
+/// accepted by positive i32 values.  In other words [1, 2^32-1]
+///
+/// An error is returned if the length is out of range
+pub fn fixed_char(length: u32, nullable: bool) -> Result<Type> {
+    let length = i32::try_from(length).map_err(|_| {
+        SubstraitExprError::invalid_input(
+            "Substrait does not support fixed_char types with length greater than 2^31-1",
+        )
+    })?;
+    Ok(Type {
+        kind: Some(Kind::FixedChar(FixedChar {
+            length,
+            nullability: nullability(nullable),
+            type_variation_reference: NO_VARIATION,
+        })),
+    })
+}
+/// Create an instance of the varchar type
+///
+/// Although length is a u32 the range allowed by Substrait is only those
+/// accepted by positive i32 values.  In other words [1, 2^32-1]
+///
+/// An error is returned if the length is out of range
+pub fn varchar(length: u32, nullable: bool) -> Result<Type> {
+    let length = i32::try_from(length).map_err(|_| {
+        SubstraitExprError::invalid_input(
+            "Substrait does not support fixed_char types with length greater than 2^31-1",
+        )
+    })?;
+    Ok(Type {
+        kind: Some(Kind::Varchar(VarChar {
+            length,
+            nullability: nullability(nullable),
+            type_variation_reference: NO_VARIATION,
+        })),
+    })
+}
+/// Create an instance of the fixed binary type
+///
+/// Although length is a u32 the range allowed by Substrait is only those
+/// accepted by positive i32 values.  In other words [1, 2^32-1]
+///
+/// An error is returned if the length is out of range
+pub fn fixed_binary(length: u32, nullable: bool) -> Result<Type> {
+    let length = i32::try_from(length).map_err(|_| {
+        SubstraitExprError::invalid_input(
+            "Substrait does not support fixed_binary types with length greater than 2^31-1",
+        )
+    })?;
+    Ok(Type {
+        kind: Some(Kind::FixedBinary(FixedBinary {
+            length,
+            nullability: nullability(nullable),
+            type_variation_reference: NO_VARIATION,
+        })),
+    })
+}
+/// Create an instance of the decimal type
+///
+/// `precision` must be in the range (0, 38]
+/// `scale` must be in the range [0, precision]
+///
+/// Returns an error if precision or scale are out of bounds
+pub fn decimal(precision: u8, scale: u8, nullable: bool) -> Result<Type> {
+    if precision == 0 || precision > 38 {
+        Err(SubstraitExprError::InvalidInput(format!(
+            "invalid precision ({}), must be in the range (0, 38]",
+            precision
+        )))
+    } else if scale > precision {
+        Err(SubstraitExprError::InvalidInput(format!(
+            "invalid scale ({}) given precision ({}), scale must be less than or equal to precision",
+            scale, precision
+        )))
+    } else {
+        Ok(Type {
+            kind: Some(Kind::Decimal(Decimal {
+                precision: precision as i32,
+                scale: scale as i32,
+                nullability: nullability(nullable),
+                type_variation_reference: NO_VARIATION,
+            })),
+        })
+    }
+}
+/// Create an instance of the list type
+pub fn list(item_type: Type, nullable: bool) -> Type {
+    Type {
+        kind: Some(Kind::List(Box::new(List {
+            r#type: Some(Box::new(item_type)),
+            nullability: nullability(nullable),
+            type_variation_reference: NO_VARIATION,
+        }))),
+    }
+}
+/// Create an instance of the map type
+pub fn map(key_type: Type, value_type: Type, nullable: bool) -> Type {
+    Type {
+        kind: Some(Kind::Map(Box::new(Map {
+            key: Some(Box::new(key_type)),
+            value: Some(Box::new(value_type)),
+            nullability: nullability(nullable),
+            type_variation_reference: NO_VARIATION,
+        }))),
+    }
+}
 /// Create an instance of the struct type
-pub fn struct_(nullable: bool, children: Vec<Type>) -> Type {
+pub fn struct_(children: Vec<Type>, nullable: bool) -> Type {
     Type {
         kind: Some(Kind::Struct(Struct {
             types: children,
             nullability: nullability(nullable),
-            ..Default::default()
+            type_variation_reference: NO_VARIATION,
         })),
     }
 }
