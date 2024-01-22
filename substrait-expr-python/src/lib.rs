@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::sync::{Arc, Mutex};
 
 use pyo3::exceptions::PyValueError;
@@ -6,7 +7,7 @@ use substrait::proto::Type;
 use substrait_expr::builder;
 use substrait_expr::builder::ExpressionsBuilder as InnerExpressionsBuilder;
 use substrait_expr::helpers;
-use substrait_expr::helpers::registry::ExtensionsRegistry;
+use substrait_expr::helpers::registry::ExtensionsRegistry as InnerExtensionsRegistry;
 use substrait_expr::helpers::types::TypeExt;
 
 trait PythonErrorExt<T> {
@@ -20,14 +21,35 @@ impl<T> PythonErrorExt<T> for std::result::Result<T, substrait_expr::error::Subs
 }
 
 #[pyclass]
+struct ExtensionsRegistry {
+    inner: Arc<InnerExtensionsRegistry>,
+}
+
+#[pymethods]
+impl ExtensionsRegistry {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(InnerExtensionsRegistry::default()),
+        }
+    }
+
+    pub fn types(&self) -> TypeBuilder {
+        TypeBuilder {
+            registry: self.inner.clone(),
+        }
+    }
+}
+
+#[pyclass]
 struct ExpressionsBuilder {
     inner: InnerExpressionsBuilder,
 }
 
 #[pyclass]
 struct TypesOnlySchemaBuilder {
-    inner: Mutex<Option<builder::schema::TypesOnlySchemaBuilder>>,
-    registry: Arc<helpers::registry::ExtensionsRegistry>,
+    inner: builder::schema::TypesOnlySchemaBuilder,
+    registry: Arc<InnerExtensionsRegistry>,
 }
 
 impl TypeBuilderFactory for builder::schema::TypesOnlySchemaBuilder {
@@ -40,11 +62,9 @@ impl TypeBuilderFactory for builder::schema::TypesOnlySchemaBuilder {
 impl TypesOnlySchemaBuilder {
     #[new]
     pub fn new() -> Self {
-        let registry = Arc::new(helpers::registry::ExtensionsRegistry::default());
+        let registry = Arc::new(InnerExtensionsRegistry::default());
         Self {
-            inner: Mutex::new(Some(
-                builder::schema::TypesOnlySchemaBuilder::new_with_types(registry.clone()),
-            )),
+            inner: builder::schema::TypesOnlySchemaBuilder::new_with_types(registry.clone()),
             registry,
         }
     }
@@ -55,10 +75,8 @@ impl TypesOnlySchemaBuilder {
         }
     }
 
-    pub fn field<'a>(slf: PyRef<'a, Self>, typ: &SubstraitType) -> PyRef<'a, Self> {
-        let mut inner_container = slf.inner.lock().unwrap();
-        let new_inner = inner_container.take().unwrap().field(typ.inner.clone());
-        *inner_container = Some(new_inner);
+    pub fn field<'a>(mut slf: PyRefMut<'a, Self>, typ: &SubstraitType) -> PyRefMut<'a, Self> {
+        slf.inner.field(typ.inner.clone());
         slf
     }
 }
@@ -67,7 +85,7 @@ impl TypesOnlySchemaBuilder {
 #[derive(Clone)]
 struct SubstraitType {
     inner: Type,
-    registry: Arc<ExtensionsRegistry>,
+    registry: Arc<InnerExtensionsRegistry>,
 }
 
 #[pymethods]
@@ -83,7 +101,7 @@ trait TypeBuilderFactory {
 
 #[pyclass]
 struct TypeBuilder {
-    registry: Arc<ExtensionsRegistry>,
+    registry: Arc<InnerExtensionsRegistry>,
 }
 
 macro_rules! simple_type {
@@ -213,5 +231,6 @@ fn _internal(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<SubstraitType>()?;
     m.add_class::<TypeBuilder>()?;
     m.add_class::<TypesOnlySchemaBuilder>()?;
+    m.add_class::<ExtensionsRegistry>()?;
     Ok(())
 }

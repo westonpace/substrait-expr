@@ -19,24 +19,25 @@
 //!     helpers::literals::literal,
 //! };
 //!
-//! let schema = SchemaInfo::new_full()
+//! let mut schema_builder = SchemaInfo::new_full();
+//! schema_builder
 //!     .field("score", types::i32(false))
 //!     .nested("location", false, |builder| {
 //!         builder
 //!             .field("x", types::fp32(false))
 //!             .field("y", types::fp64(true))
-//!     })
-//!     .build();
+//!     });
+//! let schema = schema_builder.build();
 //!
-//! let builder = ExpressionsBuilder::new(schema, BuilderParams::default());
+//! let expr_builder = ExpressionsBuilder::new(schema, BuilderParams::default());
 //!
-//! builder
+//! expr_builder
 //!     .add_expression(
 //!         "sum",
-//!         builder
+//!         expr_builder
 //!             .functions()
 //!             .add(
-//!                 builder.fields().resolve_by_name("location.x").unwrap(),
+//!                 expr_builder.fields().resolve_by_name("location.x").unwrap(),
 //!                 literal(3.0_f32),
 //!             )
 //!             .build()
@@ -44,7 +45,7 @@
 //!     )
 //!     .unwrap();
 //!
-//! let expressions = builder.build();
+//! let expressions = expr_builder.build();
 //! ```
 //!
 //! ## Creating a Schema
@@ -80,17 +81,20 @@
 //! // }
 //!
 //! // Names only
-//! let schema = SchemaInfo::new_names()
+//! let mut builder = SchemaInfo::new_names();
+//! builder
 //!     .field("score")
 //!     .nested("location", |builder| builder.field("x").field("y"));
+//! let schema = builder.build();
 //!
 //! // Types only
-//! let schema = SchemaInfo::new_types()
+//! let mut builder = SchemaInfo::new_types();
+//! builder
 //!     .field(types::fp32(true))
 //!     .nested(false, |builder| {
 //!         builder.field(types::fp64(false)).field(types::fp64(false))
-//!     })
-//!     .build();
+//!     });
+//! let schema = builder.build();
 //!
 //! // Full schema
 //! // TODO
@@ -105,11 +109,12 @@
 //! use substrait_expr::builder::schema::SchemaBuildersExt;
 //! use substrait_expr::helpers::schema::SchemaInfo;
 //!
-//! let builder = SchemaInfo::new_types();
+//! let mut builder = SchemaInfo::new_types();
 //! let complex_number = builder
 //!     .types()
 //!     .user_defined("https://imaginary.com/types", "complex-number");
-//! let schema = builder.field(complex_number.with_nullability(true)).build();
+//! builder.field(complex_number.with_nullability(true));
+//! let schema = builder.build();
 //! ```
 //!
 //! There are also utility macros for creating schemas.  These are mainly

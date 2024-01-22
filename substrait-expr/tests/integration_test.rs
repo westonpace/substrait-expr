@@ -17,10 +17,11 @@ pub fn test_schema_macros() {
             y: {}
         }
     });
-    let expected = SchemaInfo::new_names()
+    let mut expected_builder = SchemaInfo::new_names();
+    expected_builder
         .field("score")
-        .nested("location", |builder| builder.field("x").field("y"))
-        .build();
+        .nested("location", |builder| builder.field("x").field("y"));
+    let expected = expected_builder.build();
     assert_eq!(schema, expected);
 }
 
@@ -33,14 +34,15 @@ pub fn test_ext_func() {
 
 #[test]
 pub fn test_building_simple_expression() {
-    let schema = SchemaInfo::new_full()
+    let mut schema_builder = SchemaInfo::new_full();
+    schema_builder
         .field("score", types::i32(false))
         .nested("location", false, |builder| {
             builder
                 .field("x", types::fp32(false))
                 .field("y", types::fp64(true))
-        })
-        .build();
+        });
+    let schema = schema_builder.build();
 
     let params = BuilderParams {
         allow_unknown_types: true,

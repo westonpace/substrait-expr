@@ -859,12 +859,11 @@ mod tests {
 
     #[test]
     fn test_types_builder() {
-        let schema = SchemaInfo::new_types()
-            .field(types::i32(false))
-            .nested(false, |builder| {
-                builder.field(types::fp32(false)).field(types::fp64(true))
-            })
-            .build();
+        let mut builder = SchemaInfo::new_types();
+        builder.field(types::i32(false)).nested(false, |builder| {
+            builder.field(types::fp32(false)).field(types::fp64(true))
+        });
+        let schema = builder.build();
 
         assert!(schema.names_dfs().is_err());
         assert!(!schema.names_aware());
@@ -886,14 +885,15 @@ mod tests {
 
     #[test]
     fn test_full_builder() {
-        let schema = SchemaInfo::new_full()
+        let mut builder = SchemaInfo::new_full();
+        builder
             .field("score", types::i32(false))
             .nested("location", false, |builder| {
                 builder
                     .field("x", types::fp32(false))
                     .field("y", types::fp64(true))
-            })
-            .build();
+            });
+        let schema = builder.build();
 
         assert_eq!(
             schema.names_dfs().unwrap().collect::<Vec<_>>(),
