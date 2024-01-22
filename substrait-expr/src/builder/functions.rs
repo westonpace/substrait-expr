@@ -38,6 +38,8 @@ pub struct FunctionDefinition {
 /// Represents a function argument
 #[derive(Clone, Debug)]
 pub enum ImplementationArgType {
+    /// An argument is a templated value (e.g. add<T>(T, T) -> T)
+    TemplateValue(String),
     /// The argument is a constant choice between a small set of possible values
     ///
     /// For example, the "extract" function uses an enum to select the field to
@@ -68,11 +70,23 @@ impl ImplementationArg {
             Ok(true)
         } else {
             match &self.arg_type {
+                // At the moment we assume that templated values match anything
+                ImplementationArgType::TemplateValue(_) => Ok(true),
                 ImplementationArgType::Enum(_) => arg_type.same_kind(&types::string(true)),
                 ImplementationArgType::Value(expected_type) => arg_type.same_kind(expected_type),
             }
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum FunctionReturn {
+    /// The return value of the function is a templated type (e.g. add<T>(T, T) -> T)
+    Templated(String),
+    /// The return value of the function is a fixed type (e.g. add(u32, u32) -> u32)
+    Typed(Type),
+    /// The return value of the function is a program (e.g. add(Decimal<P1,S1>, Decimal<P2,S2>) -> ...)
+    Program(),
 }
 
 /// A potential implementation of a function
@@ -81,7 +95,7 @@ pub struct FunctionImplementation {
     /// The input arguments
     pub args: Vec<ImplementationArg>,
     /// The type that should be output from the function
-    pub output_type: Type,
+    pub output_type: FunctionReturn,
 }
 
 impl FunctionImplementation {
@@ -126,7 +140,7 @@ impl FunctionImplementation {
                 .collect::<Vec<_>>();
             let has_unknown = types.iter().any(|typ| typ.is_unknown(registry));
             let output_type = if has_unknown {
-                super::types::unknown(registry)
+                FunctionReturn::Typed(super::types::unknown(registry))
             } else {
                 self.output_type.clone()
             };
@@ -258,7 +272,7 @@ impl<'a> FunctionBuilder<'a> {
             })?;
         let arguments = self
             .args
-            .into_iter()
+            .iter()
             .zip(implementation.args.iter())
             .map(|(arg, imp_arg)| match &imp_arg.arg_type {
                 ImplementationArgType::Enum(vals) => {
@@ -275,7 +289,10 @@ impl<'a> FunctionBuilder<'a> {
                     }
                 }
                 ImplementationArgType::Value(_) => Ok(FunctionArgument {
-                    arg_type: Some(ArgType::Value(arg)),
+                    arg_type: Some(ArgType::Value(arg.clone())),
+                }),
+                ImplementationArgType::TemplateValue(_) => Ok(FunctionArgument {
+                    arg_type: Some(ArgType::Value(arg.clone())),
                 }),
             })
             .collect::<Result<Vec<_>>>()?;
@@ -288,6 +305,16 @@ impl<'a> FunctionBuilder<'a> {
                 preference: value,
             })
             .collect::<Vec<_>>();
+
+        let output_type = match output_type {
+            FunctionReturn::Program() => todo!(),
+            FunctionReturn::Typed(typ) => typ.clone(),
+            // TODO: This is a hack.  We need to find which input argument to base the return type on
+            // by matching the template names (e.g. if it is foo<T1,T2>(T1,T2) => T2 then this would
+            // do the wrong thing)
+            FunctionReturn::Templated(_) => self.args.first().unwrap().output_type(&self.schema)?,
+        };
+
         Ok(Expression {
             rex_type: Some(RexType::ScalarFunction(ScalarFunction {
                 arguments,

@@ -1,4 +1,5 @@
 use substrait_expr::builder::schema::SchemaBuildersExt;
+use substrait_expr::functions::functions_comparison::FunctionsComparisonExt;
 use substrait_expr::helpers::schema::{EmptySchema, SchemaInfo};
 use substrait_expr::helpers::types;
 use substrait_expr::{
@@ -56,6 +57,29 @@ pub fn test_building_simple_expression() {
                 .add(
                     builder.fields().resolve_by_name("location.x").unwrap(),
                     literal(3.0_f32),
+                )
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
+
+    let expressions = builder.build();
+    dbg!(expressions);
+}
+
+#[test]
+pub fn test_expression_with_template_params() {
+    let schema = SchemaInfo::new_full().field("x", types::i32(false)).build();
+    let builder = ExpressionsBuilder::new(schema, BuilderParams::default());
+
+    builder
+        .add_expression(
+            "filter",
+            builder
+                .functions()
+                .lt(
+                    builder.fields().resolve_by_name("x").unwrap(),
+                    literal(0_i32),
                 )
                 .build()
                 .unwrap(),
