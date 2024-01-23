@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/westonpace/substrait-expr/compare/substrait-expr-v0.1.1...substrait-expr-v0.2.0) - 2024-01-23
+
+### Added
+- add initial hacky support for impls with templated args
+
 ## [0.1.1](https://github.com/westonpace/substrait-expr/compare/substrait-expr-v0.1.0...substrait-expr-v0.1.1) - 2024-01-13
 
 ### Fixed

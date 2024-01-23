@@ -4,7 +4,7 @@ members = ["substrait-expr", "substrait-expr-funcgen", "substrait-expr-macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Weston Pace <weston.pace@gmail.com>"]
 license = "Apache-2.0"
