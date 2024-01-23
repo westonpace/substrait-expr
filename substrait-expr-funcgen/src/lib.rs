@@ -25,11 +25,7 @@ pub enum FuncGenError {
 
 type Result<T> = std::result::Result<T, FuncGenError>;
 
-fn generate_type(typ: &Type) -> Option<TokenStream> {
-    let type_name = match typ {
-        Type::Variant0(type_str) => type_str.as_str(),
-        Type::Variant1(_) => "",
-    };
+fn generate_type(fn_name: &str, type_name: &str) -> Option<TokenStream> {
     let (typ, nullability) = if type_name.ends_with('?') {
         (&type_name[0..type_name.len() - 1], true)
     } else {
@@ -44,29 +40,66 @@ fn generate_type(typ: &Type) -> Option<TokenStream> {
         "fp32" => Some(quote!(types::fp32(#nullability))),
         "fp64" => Some(quote!(types::fp64(#nullability))),
         "boolean" => Some(quote!(types::bool(#nullability))),
+        // Bleah, let's cleanup the yaml files!
+        "BOOLEAN" => Some(quote!(types::bool(#nullability))),
         _ => {
             println!(
-                "cargo:warning=Ignoring impl with unrecognized type in YAML file: {}",
-                type_name
+                "cargo:warning=Ignoring impl of {} with unrecognized type in YAML file: {}",
+                fn_name, type_name
             );
             None
         }
     }
 }
 
-fn generate_arg_block(arg: &ArgumentsItem) -> Option<TokenStream> {
+fn generate_arg_type(fn_name: &str, typ: &Type) -> Option<TokenStream> {
+    let type_name = match typ {
+        Type::Variant0(type_str) => type_str.as_str(),
+        Type::Variant1(_) => "",
+    };
+    if type_name.is_empty() {
+        return None;
+    }
+    if type_name.contains("any") || type_name == "T" {
+        Some(quote!(ImplementationArgType::TemplateValue(#type_name.to_string())))
+    } else {
+        let typ = generate_type(fn_name, type_name)?;
+        Some(quote!(ImplementationArgType::Value(#typ)))
+    }
+}
+
+fn generate_arg_return(fn_name: &str, typ: &Type) -> Option<TokenStream> {
+    let type_name = match typ {
+        Type::Variant0(type_str) => type_str.as_str(),
+        Type::Variant1(_) => "",
+    };
+    if type_name.is_empty() {
+        return None;
+    }
+    if type_name.contains("any") || type_name == "T" {
+        Some(quote!(FunctionReturn::Templated(#type_name.to_string())))
+    } else {
+        let typ = generate_type(fn_name, type_name)?;
+        Some(quote!(FunctionReturn::Typed(#typ)))
+    }
+}
+
+fn generate_arg_block(fn_name: &str, arg: &ArgumentsItem) -> Option<TokenStream> {
     match arg {
         ArgumentsItem::Variant0 { .. } => {
-            println!("cargo:warning=Ignoring implementation containing variant0 arg item");
+            println!(
+                "cargo:warning=Ignoring implementation of {} containing variant0 arg item",
+                fn_name
+            );
             None
         }
         ArgumentsItem::Variant1 { name, value, .. } => {
             let name = name.as_ref()?;
-            let typ = generate_type(value)?;
+            let typ = generate_arg_type(fn_name, value)?;
             Some(quote!(
                 ImplementationArg {
                     name: #name.to_string(),
-                    arg_type: ImplementationArgType::Value(#typ)
+                    arg_type: #typ
                 }
             ))
         }
@@ -77,12 +110,15 @@ fn generate_arg_block(arg: &ArgumentsItem) -> Option<TokenStream> {
     }
 }
 
-fn generate_implementation_block(imp: &ScalarFunctionImplsItem) -> Option<TokenStream> {
-    let output_type = generate_type(&imp.return_.0)?;
+fn generate_implementation_block(
+    fn_name: &str,
+    imp: &ScalarFunctionImplsItem,
+) -> Option<TokenStream> {
+    let output_type = generate_arg_return(fn_name, &imp.return_.0)?;
     let args = imp.args.as_ref()?;
     let args = args
         .iter()
-        .map(|arg| generate_arg_block(arg))
+        .map(|arg| generate_arg_block(fn_name, arg))
         .collect::<Option<Vec<_>>>()?;
 
     Some(quote!(
@@ -100,7 +136,7 @@ fn generate_function_block(uri: &str, func: &ScalarFunction) -> Result<TokenStre
     let implementations = func
         .impls
         .iter()
-        .map(|imp| generate_implementation_block(imp))
+        .map(|imp| generate_implementation_block(func_name, imp))
         .filter(|imp| imp.is_some())
         .collect::<Vec<_>>();
 
@@ -271,7 +307,7 @@ pub fn generate_functions(entries: &[(&str, &str)], options: Options) -> Result<
         use once_cell::sync::Lazy;
         use substrait::proto::Expression;
         use #crate_name_token::builder::functions::{FunctionDefinition, FunctionImplementation,
-            ImplementationArg, ImplementationArgType, FunctionBuilder, FunctionsBuilder};
+            ImplementationArg, ImplementationArgType, FunctionBuilder, FunctionsBuilder, FunctionReturn};
         use #crate_name_token::helpers::types;
 
         #(#yaml_modules)*
