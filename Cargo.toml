@@ -4,14 +4,14 @@ members = ["substrait-expr", "substrait-expr-funcgen", "substrait-expr-macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
-edition = "2021"
 authors = ["Weston Pace <weston.pace@gmail.com>"]
-license = "Apache-2.0"
-repository = "https://github.com/westonpace/substrait-expr"
-readme = "README.md"
 description = "Utilities for working with Substrait expressions"
+edition = "2021"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/westonpace/substrait-expr"
+version = "0.2.0"
 
 [workspace.dependencies]
-substrait-expr-funcgen = { path = "./substrait-expr-funcgen", version = "0.1.0" }
-substrait-expr-macros = { path = "./substrait-expr-macros", version = "0.1.0" }
+substrait-expr-funcgen = {path = "./substrait-expr-funcgen"}
+substrait-expr-macros = {path = "./substrait-expr-macros"}
