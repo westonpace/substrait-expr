@@ -13,5 +13,3 @@ repository = "https://github.com/westonpace/substrait-expr"
 version = "0.2.0"
 
 [workspace.dependencies]
-substrait-expr-funcgen = {path = "./substrait-expr-funcgen"}
-substrait-expr-macros = {path = "./substrait-expr-macros"}
