@@ -10,9 +10,9 @@ edition = "2021"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/westonpace/substrait-expr"
-version = "0.2.0"
+version = "0.2.1"
 
 [workspace.dependencies]
-substrait-expr-funcgen = { path = "./substrait-expr-funcgen", version = "0.2.0" }
-substrait-expr-macros = { path = "./substrait-expr-macros", version = "0.2.0" }
+substrait-expr-funcgen = { path = "./substrait-expr-funcgen", version = "0.2.1" }
+substrait-expr-macros = { path = "./substrait-expr-macros", version = "0.2.1" }
 substrait = { version = "0.29.3" }
