@@ -11,6 +11,6 @@ prettyplease = "0.2.16"
 proc-macro2 = "1.0.67"
 quote = "1.0.33"
 serde_yaml = "0.9.30"
-substrait = "0.21.0"
+substrait.workspace = true
 syn = "2.0.48"
 thiserror = "1.0.56"
