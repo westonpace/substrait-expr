@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use substrait::text::simple_extensions::{
-    ArgumentsItem, ScalarFunction, ScalarFunctionImplsItem, SimpleExtensions, Type,
+    ArgumentsItem, ScalarFunction, ScalarFunctionImplsItem, SimpleExtensions, Type, ValueArg,
 };
 use thiserror::Error;
 
@@ -86,14 +86,14 @@ fn generate_arg_return(fn_name: &str, typ: &Type) -> Option<TokenStream> {
 
 fn generate_arg_block(fn_name: &str, arg: &ArgumentsItem) -> Option<TokenStream> {
     match arg {
-        ArgumentsItem::Variant0 { .. } => {
+        ArgumentsItem::EnumerationArg { .. } => {
             println!(
-                "cargo:warning=Ignoring implementation of {} containing variant0 arg item",
+                "cargo:warning=Ignoring implementation of {} containing enumeration arg item",
                 fn_name
             );
             None
         }
-        ArgumentsItem::Variant1 { name, value, .. } => {
+        ArgumentsItem::ValueArg(ValueArg { name, value, .. }) => {
             let name = name.as_ref()?;
             let typ = generate_arg_type(fn_name, value)?;
             Some(quote!(
@@ -103,8 +103,8 @@ fn generate_arg_block(fn_name: &str, arg: &ArgumentsItem) -> Option<TokenStream>
                 }
             ))
         }
-        ArgumentsItem::Variant2 { .. } => {
-            println!("cargo:warning=Ignoring implementation containing variant0 arg item");
+        ArgumentsItem::TypeArg { .. } => {
+            println!("cargo:warning=Ignoring implementation containing type arg item");
             None
         }
     }

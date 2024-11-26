@@ -13,4 +13,4 @@ quote = "1.0.33"
 serde_yaml = "0.9.30"
 substrait.workspace = true
 syn = "2.0.48"
-thiserror = "1.0.56"
+thiserror = "2.0.3"
