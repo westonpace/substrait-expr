@@ -25,4 +25,4 @@ prost = "0.13.3"
 thiserror = "2.0.3"
 
 [build-dependencies]
-substrait-expr-funcgen = { path = "../substrait-expr-funcgen", version = "0.2.1" }
+substrait-expr-funcgen = { path = "../substrait-expr-funcgen", version = "0.2.4" }
