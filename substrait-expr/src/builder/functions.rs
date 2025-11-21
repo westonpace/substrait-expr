@@ -185,9 +185,9 @@ impl FunctionDefinition {
 /// See [`lookup_field_by_name`](crate::builder::functions::FunctionsBuilder::lookup_field_by_name)
 ///
 /// This is very likely to change when Substrait formally adopts a late lookup feature
-pub const LOOKUP_BY_NAME_FUNC_URI: &'static str = "https://substrait.io/functions";
+pub const LOOKUP_BY_NAME_FUNC_URI: &str = "https://substrait.io/functions";
 /// The name of the special function we use to indicate a late lookup
-pub const LOOKUP_BY_NAME_FUNC_NAME: &'static str = "lookup_by_name";
+pub const LOOKUP_BY_NAME_FUNC_NAME: &str = "lookup_by_name";
 
 /// A builder that can create scalar function expressions
 pub struct FunctionsBuilder<'a> {
@@ -210,10 +210,10 @@ impl<'a> FunctionsBuilder<'a> {
         &self,
         func: &'static FunctionDefinition,
         args: Vec<Expression>,
-    ) -> FunctionBuilder {
+    ) -> FunctionBuilder<'_> {
         let func_reference = self.schema.extensions_registry().register_function(func);
         FunctionBuilder {
-            func: func,
+            func,
             func_reference,
             args,
             options: BTreeMap::new(),
@@ -312,7 +312,7 @@ impl<'a> FunctionBuilder<'a> {
             // TODO: This is a hack.  We need to find which input argument to base the return type on
             // by matching the template names (e.g. if it is foo<T1,T2>(T1,T2) => T2 then this would
             // do the wrong thing)
-            FunctionReturn::Templated(_) => self.args.first().unwrap().output_type(&self.schema)?,
+            FunctionReturn::Templated(_) => self.args.first().unwrap().output_type(self.schema)?,
         };
 
         Ok(Expression {

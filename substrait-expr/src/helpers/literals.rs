@@ -116,7 +116,7 @@ impl LiteralInference for i32 {
 
 impl LiteralInference for i64 {
     fn to_substrait(self) -> LiteralType {
-        LiteralType::I64(self as i64)
+        LiteralType::I64(self)
     }
     fn try_from_substrait(lit: &LiteralType) -> Result<Self> {
         match lit {
@@ -261,7 +261,7 @@ pub mod literals {
         } else {
             Ok(make_literal(
                 LiteralType::VarChar(VarChar {
-                    value: value.into(),
+                    value,
                     length,
                 }),
                 false,

@@ -276,7 +276,7 @@ impl SchemaInfo {
     /// Returns an iterator through the names of the fields, in DFS order
     ///
     /// Returns an error if the schema does not know the names of its fields
-    pub fn names_dfs<'a>(&'a self) -> Result<Box<dyn Iterator<Item = &str> + 'a>> {
+    pub fn names_dfs<'a>(&'a self) -> Result<Box<dyn Iterator<Item = &'a str> + 'a>> {
         match self {
             SchemaInfo::Empty(_) => Err(SubstraitExprError::invalid_input(
                 "Attempt to access field names when the schema is not name-aware",

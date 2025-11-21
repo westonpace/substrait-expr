@@ -2,6 +2,7 @@ use crate::error::{Result, SubstraitExprError};
 
 /// Helper trait for extracting a property that should always be present
 /// from a protobuf message and returning an error if it is not
+#[allow(dead_code)]
 pub(crate) trait HasRequiredProperties<T> {
     fn into_required(self, prop_name: &str) -> Result<T>;
 }

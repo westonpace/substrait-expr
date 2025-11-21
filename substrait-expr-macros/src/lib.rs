@@ -40,7 +40,7 @@ fn rust_to_names_fields(schema: &NestedType) -> proc_macro2::TokenStream {
     let parsed_fields = schema
         .fields
         .iter()
-        .map(|field| rust_field_to_names_field(field))
+        .map(rust_field_to_names_field)
         .collect::<Vec<_>>();
     quote! {vec![#(#parsed_fields),*]}
 }

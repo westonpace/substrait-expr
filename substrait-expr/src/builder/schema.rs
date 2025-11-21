@@ -90,6 +90,12 @@ pub struct TypesOnlySchemaBuilder {
     registry: ExtensionsRegistry,
 }
 
+impl Default for TypesOnlySchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypesOnlySchemaBuilder {
     /// Create a new builder
     pub fn new() -> Self {
@@ -153,7 +159,7 @@ impl TypesOnlySchemaBuilder {
     }
 
     /// Create a type builder to create user defined types
-    pub fn types(&self) -> TypeBuilder {
+    pub fn types(&self) -> TypeBuilder<'_> {
         TypeBuilder {
             registry: &self.registry,
         }
@@ -164,6 +170,12 @@ impl TypesOnlySchemaBuilder {
 pub struct NamesOnlySchemaNodeBuilder {
     children: Vec<NamesOnlySchemaNode>,
     registry: ExtensionsRegistry,
+}
+
+impl Default for NamesOnlySchemaNodeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NamesOnlySchemaNodeBuilder {

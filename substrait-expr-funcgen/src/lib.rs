@@ -54,8 +54,8 @@ fn generate_type(fn_name: &str, type_name: &str) -> Option<TokenStream> {
 
 fn generate_arg_type(fn_name: &str, typ: &Type) -> Option<TokenStream> {
     let type_name = match typ {
-        Type::Variant0(type_str) => type_str.as_str(),
-        Type::Variant1(_) => "",
+        Type::String(type_str) => type_str.as_str(),
+        Type::Object(_) => "",
     };
     if type_name.is_empty() {
         return None;
@@ -70,8 +70,8 @@ fn generate_arg_type(fn_name: &str, typ: &Type) -> Option<TokenStream> {
 
 fn generate_arg_return(fn_name: &str, typ: &Type) -> Option<TokenStream> {
     let type_name = match typ {
-        Type::Variant0(type_str) => type_str.as_str(),
-        Type::Variant1(_) => "",
+        Type::String(type_str) => type_str.as_str(),
+        Type::Object(_) => "",
     };
     if type_name.is_empty() {
         return None;
@@ -196,9 +196,9 @@ fn generate_ext_impls(function: &ScalarFunction) -> Result<Vec<(TokenStream, Tok
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
-            let prototype = quote!(fn #fn_name_token(&self, #(#arg_name_tokens: Expression),*) -> FunctionBuilder;);
+            let prototype = quote!(fn #fn_name_token(&self, #(#arg_name_tokens: Expression),*) -> FunctionBuilder<'_>;);
             let imp = quote!(
-                fn #fn_name_token(&self, #(#arg_name_tokens: Expression),*) -> FunctionBuilder {
+                fn #fn_name_token(&self, #(#arg_name_tokens: Expression),*) -> FunctionBuilder<'_> {
                     self.new_builder(&#func_name_caps, vec![#(#arg_name_tokens),*])
                 }
             );
@@ -224,7 +224,7 @@ fn generate_function_blocks(
     let prototypes_impls = extensions
         .scalar_functions
         .iter()
-        .map(|func| generate_ext_impls(func))
+        .map(generate_ext_impls)
         .flat_map(|impls| match impls {
             Ok(impls) => impls.into_iter().map(Ok).collect(),
             Err(err) => vec![Err(err)],
@@ -262,7 +262,7 @@ pub fn generate_functions_for_yaml(uri: &str, filepath: &str) -> Result<TokenStr
         .to_str()
         .unwrap();
 
-    let func_blocks = generate_function_blocks(uri, &mod_name, extensions)?;
+    let func_blocks = generate_function_blocks(uri, mod_name, extensions)?;
 
     let mod_name_token: TokenStream = mod_name.parse()?;
 
@@ -299,7 +299,7 @@ impl Options {
 pub fn generate_functions(entries: &[(&str, &str)], options: Options) -> Result<()> {
     let yaml_modules = entries
         .iter()
-        .map(|entry| generate_functions_for_yaml(entry.0, &entry.1))
+        .map(|entry| generate_functions_for_yaml(entry.0, entry.1))
         .collect::<Result<Vec<_>>>()?;
     let crate_name_token: TokenStream = options.get_crate_name().parse()?;
 

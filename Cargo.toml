@@ -15,4 +15,4 @@ version = "0.2.3"
 [workspace.dependencies]
 substrait-expr-funcgen = { path = "./substrait-expr-funcgen", version = "0.2.1" }
 substrait-expr-macros = { path = "./substrait-expr-macros", version = "0.2.1" }
-substrait = { version = "0.50.4" }
+substrait = { version = "0.62.0" }

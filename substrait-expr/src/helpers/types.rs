@@ -255,8 +255,8 @@ pub fn struct_(nullable: bool, children: Vec<Type>) -> Type {
     }
 }
 /// The URI of the unknown type
-pub const UNKNOWN_TYPE_URI: &'static str = "https://substrait.io/types";
+pub const UNKNOWN_TYPE_URI: &str = "https://substrait.io/types";
 /// The name of the unknown type
-pub const UNKNOWN_TYPE_NAME: &'static str = "unknown";
+pub const UNKNOWN_TYPE_NAME: &str = "unknown";
 /// A friendly name that indicates there is no type variation being used
 pub const NO_VARIATION: u32 = 0;

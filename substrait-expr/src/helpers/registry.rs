@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::RwLock};
 
 use substrait::proto::extensions::{
     simple_extension_declaration::{ExtensionFunction, ExtensionType, MappingType},
-    SimpleExtensionDeclaration, SimpleExtensionUri,
+    SimpleExtensionDeclaration, SimpleExtensionUri, SimpleExtensionUrn,
 };
 
 use crate::builder::functions::FunctionDefinition;
@@ -56,14 +56,22 @@ impl UriLookup {
         })
     }
 
-    pub fn to_substrait(self) -> Vec<SimpleExtensionUri> {
-        self.uris
-            .into_iter()
+    pub fn to_substrait(self) -> (Vec<SimpleExtensionUri>, Vec<SimpleExtensionUrn>) {
+        let uris = self.uris
+            .iter()
             .map(|entry| SimpleExtensionUri {
-                extension_uri_anchor: entry.1,
-                uri: entry.0,
+                extension_uri_anchor: *entry.1,
+                uri: entry.0.clone(),
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        let urns = self.uris
+            .into_iter()
+            .map(|entry| SimpleExtensionUrn {
+                extension_urn_anchor: entry.1,
+                urn: entry.0,
+            })
+            .collect::<Vec<_>>();
+        (uris, urns)
     }
 }
 
@@ -101,7 +109,7 @@ impl RegistryInternal {
                 let anchor = self.counter;
                 self.counter += 1;
                 let type_record = TypeRecord {
-                    uri: uri,
+                    uri,
                     name: name.to_string(),
                     anchor,
                 };
@@ -121,7 +129,7 @@ impl RegistryInternal {
                 let function_record = FunctionRecord {
                     uri: uri.to_string(),
                     name: name.to_string(),
-                    anchor: anchor,
+                    anchor,
                 };
                 self.functions_inverse
                     .insert(anchor, function_record.clone());
@@ -213,9 +221,11 @@ impl ExtensionsRegistry {
     ) {
         for record in internal.types.values() {
             let uri_ref = uris.register(record.uri.clone());
+            #[allow(deprecated)]
             let declaration = SimpleExtensionDeclaration {
                 mapping_type: Some(MappingType::ExtensionType(ExtensionType {
                     extension_uri_reference: uri_ref,
+                    extension_urn_reference: uri_ref,
                     type_anchor: record.anchor,
                     name: record.name.clone(),
                 })),
@@ -232,9 +242,11 @@ impl ExtensionsRegistry {
     ) {
         for record in internal.functions.values() {
             let uri_ref = uris.register(record.uri.clone());
+            #[allow(deprecated)]
             let declaration = SimpleExtensionDeclaration {
                 mapping_type: Some(MappingType::ExtensionFunction(ExtensionFunction {
                     extension_uri_reference: uri_ref,
+                    extension_urn_reference: uri_ref,
                     function_anchor: record.anchor,
                     name: record.name.clone(),
                 })),
@@ -246,7 +258,7 @@ impl ExtensionsRegistry {
     /// Creates a substrait representation of the extensions registry
     ///
     /// This is typically placed in a top-level message such as ExtendedExpression or Plan
-    pub fn to_substrait(&self) -> (Vec<SimpleExtensionUri>, Vec<SimpleExtensionDeclaration>) {
+    pub fn to_substrait(&self) -> (Vec<SimpleExtensionUri>, Vec<SimpleExtensionUrn>, Vec<SimpleExtensionDeclaration>) {
         let mut uris = UriLookup::new();
         let mut extensions: Vec<SimpleExtensionDeclaration> = Vec::new();
         let internal = self.internal.read().unwrap();
@@ -254,8 +266,8 @@ impl ExtensionsRegistry {
         self.add_types(&internal, &mut uris, &mut extensions);
         self.add_functions(&internal, &mut uris, &mut extensions);
 
-        let uris = uris.to_substrait();
+        let (uris, urns) = uris.to_substrait();
 
-        (uris, extensions)
+        (uris, urns, extensions)
     }
 }

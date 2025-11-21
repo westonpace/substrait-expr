@@ -205,21 +205,13 @@ pub mod functions;
 pub mod schema;
 pub mod types;
 
+#[derive(Default)]
 pub struct BuilderParams {
     pub allow_late_name_lookup: bool,
     pub allow_loose_types: bool,
     pub allow_unknown_types: bool,
 }
 
-impl Default for BuilderParams {
-    fn default() -> Self {
-        Self {
-            allow_late_name_lookup: false,
-            allow_loose_types: false,
-            allow_unknown_types: false,
-        }
-    }
-}
 
 impl BuilderParams {
     pub fn new_loose() -> Self {
@@ -269,7 +261,7 @@ pub trait IntoExprOutputNames {
     fn into_names(self) -> Vec<String>;
 }
 
-impl<'a> IntoExprOutputNames for &'a str {
+impl IntoExprOutputNames for &str {
     fn into_names(self) -> Vec<String> {
         vec![self.to_string()]
     }
@@ -296,11 +288,11 @@ impl ExpressionsBuilder {
         }
     }
 
-    pub fn fields(&self) -> RefBuilder {
+    pub fn fields(&self) -> RefBuilder<'_> {
         RefBuilder::new(&self.schema, &self.params, self.functions())
     }
 
-    pub fn functions(&self) -> FunctionsBuilder {
+    pub fn functions(&self) -> FunctionsBuilder<'_> {
         FunctionsBuilder::new(&self.schema)
     }
 
@@ -319,7 +311,7 @@ impl ExpressionsBuilder {
     }
 
     pub fn build(self) -> ExtendedExpression {
-        let (extension_uris, extensions) = self.schema.extensions_registry().to_substrait();
+        let (extension_uris, extension_urns, extensions) = self.schema.extensions_registry().to_substrait();
         let referred_expr = self
             .expressions
             .into_inner()
@@ -329,9 +321,11 @@ impl ExpressionsBuilder {
                 expr_type: Some(ExprType::Expression(named_expr.expr)),
             })
             .collect::<Vec<_>>();
+        #[allow(deprecated)]
         ExtendedExpression {
             version: Some(substrait::version::version_with_producer("substrait-expr")),
             extension_uris,
+            extension_urns,
             extensions,
             advanced_extensions: None,
             expected_type_urls: Vec::new(),
