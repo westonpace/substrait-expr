@@ -221,7 +221,7 @@ impl ExtensionsRegistry {
     ) {
         for record in internal.types.values() {
             let uri_ref = uris.register(record.uri.clone());
-            #[allow(deprecated)]
+            #[expect(deprecated)]
             let declaration = SimpleExtensionDeclaration {
                 mapping_type: Some(MappingType::ExtensionType(ExtensionType {
                     extension_uri_reference: uri_ref,
@@ -242,7 +242,7 @@ impl ExtensionsRegistry {
     ) {
         for record in internal.functions.values() {
             let uri_ref = uris.register(record.uri.clone());
-            #[allow(deprecated)]
+            #[expect(deprecated)]
             let declaration = SimpleExtensionDeclaration {
                 mapping_type: Some(MappingType::ExtensionFunction(ExtensionFunction {
                     extension_uri_reference: uri_ref,

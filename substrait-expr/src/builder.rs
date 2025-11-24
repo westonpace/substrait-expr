@@ -321,7 +321,7 @@ impl ExpressionsBuilder {
                 expr_type: Some(ExprType::Expression(named_expr.expr)),
             })
             .collect::<Vec<_>>();
-        #[allow(deprecated)]
+        #[expect(deprecated)]
         ExtendedExpression {
             version: Some(substrait::version::version_with_producer("substrait-expr")),
             extension_uris,
