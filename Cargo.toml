@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Weston Pace <weston.pace@gmail.com>"]
-description = "Utilities for working with Substrait expressions"
+description = "Utilities for working with Substrait expressions.  NO LONGER MAINTAINED."
 edition = "2021"
 license = "Apache-2.0"
 readme = "README.md"
