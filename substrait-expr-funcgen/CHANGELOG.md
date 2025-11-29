@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/westonpace/substrait-expr/compare/substrait-expr-funcgen-v0.2.3...substrait-expr-funcgen-v0.2.4) - 2025-01-06
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.1](https://github.com/westonpace/substrait-expr/compare/substrait-expr-funcgen-v0.2.0...substrait-expr-funcgen-v0.2.1) - 2024-04-08
 
 ### Other
